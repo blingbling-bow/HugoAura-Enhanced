@@ -9,7 +9,12 @@ const def = {
       active: true,
       pageURI: "ui/pages/headerIcon/headerIcon.html",
       pageScript: "ui/pages/headerIcon/headerIcon.js",
-      pageSelector: ".index__feedback__2XvUK2qe",
+      pageSelector: [
+        ".index__feedback__2XvUK2qe",
+        ".index__button3__1o6rmeo5",
+        ".index__header__3MZ6naLK",
+        ".index__header__16DmR2a5",
+      ],
       selectorMode: "insertAfter",
       pageCSS: "ui/pages/headerIcon/headerIcon.css",
       revive: true,

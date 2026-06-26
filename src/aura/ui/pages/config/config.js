@@ -6,6 +6,20 @@ global.__HUGO_AURA_UI_REACTIVES__.config = {
 };
 
 global.__HUGO_AURA_UI_FUNCTIONS__.config = {
+  getDefaultHeaderEl: () => {
+    const headerSelectors = [
+      "index__header__16DmR2a5",
+      "index__header__3MZ6naLK",
+    ];
+
+    for (const selector of headerSelectors) {
+      const headerEl = document.getElementsByClassName(selector)[0];
+      if (headerEl) return headerEl;
+    }
+
+    return null;
+  },
+
   closeWindow: async () => {
     if (global.__HUGO_AURA_UI_REACTIVES__.config.isConfigPendingWrite) {
       await global.__HUGO_AURA_UI_FUNCTIONS__.config.handleSaveConfig();
@@ -60,10 +74,11 @@ global.__HUGO_AURA_UI_FUNCTIONS__.config = {
   },
 
   hideConfigPage: async () => {
-    const defaultHeader = document.getElementsByClassName(
-      "index__header__16DmR2a5"
-    )[0];
-    defaultHeader.style = "-webkit-app-region: drag;";
+    const defaultHeader =
+      global.__HUGO_AURA_UI_FUNCTIONS__.config.getDefaultHeaderEl();
+    if (defaultHeader) {
+      defaultHeader.style = "-webkit-app-region: drag;";
+    }
 
     const auraConfigPageRoot = document.getElementsByClassName(
       "aura-config-page-root"
@@ -341,10 +356,33 @@ global.__HUGO_AURA_UI_FUNCTIONS__.config = {
 
     nodeVersionEl.textContent = window.process.versions.node;
     electronVersionEl.textContent = window.process.versions.electron;
-    hugoVersionEl.textContent = window.CUSTOM_CONFIG.root
-      .replace(/\\/g, "/")
-      .split("SeewoService_")[1]
-      .split("/")[0];
+    const getHugoVersion = () => {
+      try {
+        const acceptDataVersion =
+          window._ACCEPT_DATA &&
+          window._ACCEPT_DATA.getData &&
+          window._ACCEPT_DATA.getData("appVersion");
+        if (acceptDataVersion) return acceptDataVersion;
+      } catch (_err) {}
+
+      if (window.appVersion) return window.appVersion;
+
+      try {
+        const path = require("path");
+        const fs = require("fs");
+        const versionPath = path.join(
+          path.dirname(window.process.execPath),
+          "version"
+        );
+        if (fs.existsSync(versionPath)) {
+          return fs.readFileSync(versionPath, "utf8").trim();
+        }
+      } catch (_err) {}
+
+      return "unknown";
+    };
+
+    hugoVersionEl.textContent = getHugoVersion();
     auraVersionEl.textContent = window.__HUGO_AURA__.version;
   };
 
@@ -427,12 +465,13 @@ global.__HUGO_AURA_UI_FUNCTIONS__.config = {
     await window.__HUGO_AURA_GLOBAL__.utils.sleep(200);
     auraConfigPageRoot.className = "aura-config-page-root";
 
-    const defaultHeader = document.getElementsByClassName(
-      "index__header__16DmR2a5"
-    )[0];
+    const defaultHeader =
+      global.__HUGO_AURA_UI_FUNCTIONS__.config.getDefaultHeaderEl();
 
     await window.__HUGO_AURA_GLOBAL__.utils.sleep(500);
-    defaultHeader.style = "display: none;";
+    if (defaultHeader) {
+      defaultHeader.style = "display: none;";
+    }
     showVersionContainerAnimation();
     showHeaderAnimation();
     await window.__HUGO_AURA_GLOBAL__.utils.sleep(500);

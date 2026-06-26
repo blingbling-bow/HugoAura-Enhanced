@@ -4,7 +4,7 @@ interface UIHookTarget {
   active?: boolean;
   pageURI?: string;
   pageScript?: string;
-  pageSelector?: string;
+  pageSelector?: string | string[];
   selectorMode?: "insertAfter" | "insertBefore" | "appendChild";
   pageCSS?: string;
   childs?: Record<AuraElementUID, UIHookTarget>;

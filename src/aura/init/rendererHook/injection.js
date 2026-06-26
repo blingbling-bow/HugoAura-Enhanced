@@ -1,14 +1,28 @@
 (() => {
-  const waitForElement = (selector, timeout = 5000) => {
+  const findElement = (selectors) => {
+    const selectorList = Array.isArray(selectors) ? selectors : [selectors];
+
+    for (const selector of selectorList) {
+      if (!selector) continue;
+      const element = document.querySelector(selector);
+      if (element) return element;
+    }
+
+    return null;
+  };
+
+  const waitForElement = (selectors, timeout = 5000) => {
     return new Promise((resolve, reject) => {
-      if (document.querySelector(selector)) {
-        return resolve(document.querySelector(selector));
+      const currentElement = findElement(selectors);
+      if (currentElement) {
+        return resolve(currentElement);
       }
 
       const observer = new MutationObserver((mutations) => {
-        if (document.querySelector(selector)) {
+        const element = findElement(selectors);
+        if (element) {
           observer.disconnect();
-          resolve(document.querySelector(selector));
+          resolve(element);
         }
       });
 
@@ -142,9 +156,7 @@
       const elementId = `aura-container-${moduleKey.replace(/\./g, "-")}`;
       const observer = new MutationObserver((_mutations) => {
         if (!document.getElementById(elementId)) {
-          let targetElement = document.querySelector(
-            flatModules[moduleKey].pageSelector
-          );
+          let targetElement = findElement(flatModules[moduleKey].pageSelector);
           if (
             targetElement &&
             flatModules[moduleKey].active &&
