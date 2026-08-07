@@ -74,4 +74,4 @@ jobs:
       - name: Upload release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create vAutoBuild-${{ env.SHORT_HASH }} Artifacts/aura.zip Artifacts/core.zip --title "[CI] HugoAura Auto Build Release (${{ env.SHORT_HASH }})" --notes-file rel_msg.txt --prerelease
+        run: gh release create vAutoBuild-${{ env.SHORT_HASH }} "$GITHUB_WORKSPACE/Artifacts/aura.zip" "$GITHUB_WORKSPACE/Artifacts/core.zip" --title "[CI] HugoAura Auto Build Release (${{ env.SHORT_HASH }})" --notes-file "$GITHUB_WORKSPACE/rel_msg.txt" --repo ${{ github.repository }} --prerelease
