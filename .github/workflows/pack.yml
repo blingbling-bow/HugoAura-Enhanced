@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Checkout repository code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: "./HugoAura-Code"
 
@@ -60,26 +60,18 @@ jobs:
           EOF
 
       - name: Upload aura.zip
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aura-code
           path: Artifacts/aura.zip
 
       - name: Upload core.zip
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aura-core
           path: Artifacts/core.zip
 
       - name: Upload release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: vAutoBuild-${{ env.SHORT_HASH }}
-          name: "[CI] HugoAura Auto Build Release (${{ env.SHORT_HASH }})"
-          body_path: rel_msg.txt
-          prerelease: true
-          generate_release_notes: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-          files: |
-            Artifacts/aura.zip
-            Artifacts/core.zip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create vAutoBuild-${{ env.SHORT_HASH }} Artifacts/aura.zip Artifacts/core.zip --title "[CI] HugoAura Auto Build Release (${{ env.SHORT_HASH }})" --notes-file rel_msg.txt --prerelease
