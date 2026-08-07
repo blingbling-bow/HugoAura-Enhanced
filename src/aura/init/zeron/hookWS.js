@@ -1,6 +1,6 @@
 const buildClass = (n) => {
   // >>> BEGIN OF SEEWO HUGO ORIGINAL CODE <<< //
-  const s = n(239),
+  const s = n(243),
     o = n(7);
   class WebSocketManager {
     constructor(e, t) {
