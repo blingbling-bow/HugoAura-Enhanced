@@ -9,12 +9,11 @@
 <br />
 
 <center>
-  <a href="https://forum.smart-teach.cn/d/898-xi-wo-guan-jia-zhe-kuai-zhen-de-shi-zhao-xiao-si-liao">
+  <a href="https://campus.seewo.com/iot-public/file/?key=iot_doc_seewoServiceUpdateLog">
     <img src="https://docs.aurax.cc/static/img/emg_announcement_banner.png" />
   </a>
 </center>
 
-<br />
 <br />
 
 > [!TIP]
@@ -23,14 +22,19 @@
 > [!WARNING]
 >
 > 我们正在进行品牌形象更新, 本仓库 (`HugoAura/Seewo-HugoAura` / HugoAura SSA Electron Injection Loader) 将会逐渐改称 `HugoAura-Main`。这是为了区分 Project HugoAura 与 HugoAura SSA Electron Injection Loader 二者。
+教程
+
+> [!WARNING]
+>
+> 这是 HugoAura-Main 的一个分支。请查看主仓库 [HugoAura/Seewo-HugoAura](https://github.com/HugoAura/Seewo-HugoAura/)
 
 > [!IMPORTANT]
-> 已经过测试的希沃管家版本: v1.5.5.3917
+> 已经过测试的希沃管家版本: v1.6.6.3993
 
 > [!NOTE]
 > **社群信息**
 >
-> - [QQ 群 (用户自治)](https://c.colchicum.moe)
+> - [QQ 群 (用户自治)](https://qm.qq.com/q/buo7m9oHBK)
 > - [Telegram 公告频道](https://t.me/HugoAura)
 > - [Telegram 群组](https://t.me/HugoAura_Chat)
 > - [STCN 论坛讨论版块](https://forum.smart-teach.cn/t/hugoaura)
