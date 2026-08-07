@@ -348,6 +348,53 @@ global.__HUGO_AURA_UI_FUNCTIONS__.config = {
 };
 
 (() => {
+  const extractVersionFromPath = (value) => {
+    const normalizedPath = String(value || "").replace(/\\/g, "/");
+    const match = normalizedPath.match(/(?:^|\/)SeewoService_([^\/]+)/);
+    return match ? match[1].trim() : null;
+  };
+
+  const getHugoVersion = () => {
+    try {
+      const acceptDataVersion =
+        window._ACCEPT_DATA &&
+        window._ACCEPT_DATA.getData &&
+        window._ACCEPT_DATA.getData("appVersion");
+      if (acceptDataVersion) return String(acceptDataVersion).trim();
+    } catch (_err) {
+      // The host may expose _ACCEPT_DATA before it is fully initialized.
+    }
+
+    try {
+      if (window.appVersion) return String(window.appVersion).trim();
+    } catch (_err) {
+      // Ignore unavailable host globals and continue with filesystem fallbacks.
+    }
+
+    const configuredRootVersion = extractVersionFromPath(
+      window.CUSTOM_CONFIG && window.CUSTOM_CONFIG.root
+    );
+    if (configuredRootVersion) return configuredRootVersion;
+
+    try {
+      const path = require("path");
+      const fs = require("fs");
+      const execDir = path.dirname(window.process.execPath);
+      const versionDirs = [execDir, path.dirname(execDir)];
+
+      for (const dir of versionDirs) {
+        const versionPath = path.join(dir, "version");
+        if (!fs.existsSync(versionPath)) continue;
+        const version = fs.readFileSync(versionPath, "utf8").trim();
+        if (version) return version;
+      }
+    } catch (_err) {
+      // Ignore unavailable Node APIs or unreadable install files.
+    }
+
+    return null;
+  };
+
   const applyVersionInfo = () => {
     const nodeVersionEl = document.getElementById("nodeVersion");
     const electronVersionEl = document.getElementById("electronVersion");
@@ -356,33 +403,21 @@ global.__HUGO_AURA_UI_FUNCTIONS__.config = {
 
     nodeVersionEl.textContent = window.process.versions.node;
     electronVersionEl.textContent = window.process.versions.electron;
-    const getHugoVersion = () => {
-      try {
-        const acceptDataVersion =
-          window._ACCEPT_DATA &&
-          window._ACCEPT_DATA.getData &&
-          window._ACCEPT_DATA.getData("appVersion");
-        if (acceptDataVersion) return acceptDataVersion;
-      } catch (_err) {}
+    const updateHugoVersion = (attempt = 0) => {
+      const version = getHugoVersion();
+      if (version) {
+        hugoVersionEl.textContent = version;
+        return;
+      }
 
-      if (window.appVersion) return window.appVersion;
-
-      try {
-        const path = require("path");
-        const fs = require("fs");
-        const versionPath = path.join(
-          path.dirname(window.process.execPath),
-          "version"
-        );
-        if (fs.existsSync(versionPath)) {
-          return fs.readFileSync(versionPath, "utf8").trim();
-        }
-      } catch (_err) {}
-
-      return "unknown";
+      if (attempt < 12) {
+        setTimeout(() => updateHugoVersion(attempt + 1), 250);
+      } else {
+        hugoVersionEl.textContent = "unknown";
+      }
     };
 
-    hugoVersionEl.textContent = getHugoVersion();
+    updateHugoVersion();
     auraVersionEl.textContent = window.__HUGO_AURA__.version;
   };
 
