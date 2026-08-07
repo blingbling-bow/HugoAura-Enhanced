@@ -1,10 +1,8 @@
 name: Pack source code & Create CI/CD Release
 
 on:
+  # 任意分支每次 push 都触发一次自动构建
   push:
-    branches: [dev, stable]
-  pull_request:
-    branches: [dev, stable, main, master]
   workflow_dispatch:
 
 permissions: write-all
@@ -52,7 +50,7 @@ jobs:
 
           ### 版本号: `vAutoBuild-${{ env.SHORT_HASH }}`
 
-          ### 对应 Commit: [`${{ env.SHORT_HASH }}`](https://github.com/HugoAura/Seewo-HugoAura/commit/${{ env.FULL_HASH }})
+          ### 对应 Commit: [`${{ env.SHORT_HASH }}`](https://github.com/${{ github.repository }}/commit/${{ env.FULL_HASH }})
 
           ---
 
@@ -76,8 +74,8 @@ jobs:
       - name: Upload release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: vAutoBuild
-          name: "[CI] HugoAura Auto Build Release"
+          tag_name: vAutoBuild-${{ env.SHORT_HASH }}
+          name: "[CI] HugoAura Auto Build Release (${{ env.SHORT_HASH }})"
           body_path: rel_msg.txt
           prerelease: true
           generate_release_notes: false
