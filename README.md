@@ -1,6 +1,6 @@
 <center><img src="https://s2.loli.net/2025/04/18/IpZL7qMw2KFEi8o.png" /></center>
 
-<h1 align="center">HugoAura</h1>
+<h1 align="center">HugoAura<br/>Enhanced</h1>
 <h4 align="center">下一代希沃管家注入式修改方案</h4>
 <div align="center">
   <a href="https://github.com/HugoAura/HugoAura">首页</a> · <a href="https://hugo.aurax.cc/about">关于 (WIP)</a> · <a href="https://docs.aurax.cc/">文档</a> · <a href="https://github.com/HugoAura/HugoAura/issues">反馈</a> · <a href="https://forum.smart-teach.cn/t/hugoaura">社区</a>
@@ -17,12 +17,21 @@
 <br />
 
 > [!TIP]
+> HugoAura 的首个预览版已发布! [查看安装教程](https://github.com/HugoAura/HugoAura/wiki)
+
+> [!TIP]
 > 在[此处](https://docs.aurax.cc/)查看 HugoAura 的文档与安装教程
 
 > [!WARNING]
 >
 > 我们正在进行品牌形象更新, 本仓库 (`HugoAura/Seewo-HugoAura` / HugoAura SSA Electron Injection Loader) 将会逐渐改称 `HugoAura-Main`。这是为了区分 Project HugoAura 与 HugoAura SSA Electron Injection Loader 二者。
-教程
+
+> [!WARNING]
+> 我们正在使用 C++ 重构 PLS, 新的子项目代号为 [Aikari](https://github.com/HugoAura/HugoAura-Aikari)。其将集成 MQTT 消息中转、HugoAura 自动更新、特权操作辅助等功能。
+>
+> 在 Aikari 的首个 Alpha 版本发布前, HugoAura 主项目与 [PLS](https://github.com/HugoAura/HugoAura-PLS) 的新功能更新频率将减弱。
+>
+> 您依然可以提出 Feature Request 或 Bug Report。开发者将在能力 / 时间限度内尽可能处理。
 
 > [!WARNING]
 >
@@ -31,13 +40,17 @@
 > [!IMPORTANT]
 > 已经过测试的希沃管家版本: v1.6.6.3993
 
+> [!IMPORTANT]
+> **温馨提示**：本项目有部分成分由**氛围编程 (Vibe Coding)** 方式编写。
+> 
+> 如果您对此类项目有固有的排斥感，请无视此项目，谢谢。
+
 > [!NOTE]
 > **社群信息**
 >
 > - [QQ 群 (用户自治)](https://qm.qq.com/q/buo7m9oHBK)
 > - [Telegram 公告频道](https://t.me/HugoAura)
 > - [Telegram 群组](https://t.me/HugoAura_Chat)
-> - [STCN 论坛讨论版块](https://forum.smart-teach.cn/t/hugoaura)
 
 ![Repobeats](https://repobeats.axiom.co/api/embed/69b5be5daacef624b8f5e4b8966a0b5898439a22.svg "Repobeats analytics image")
 
@@ -58,7 +71,7 @@
 - [x] 修改希沃管家密码认证组件 (自定义密码 / 解除密码 / 重设认证方式 / ...)
 - [x] 阻止希沃管家前端 Audit 上报行为
 - [x] 屏蔽屏幕锁 / 自定义屏幕锁行为
-- [x] Aura 代理层服务 (篡改上报数据 / 欺骗冰冻状态)
+- [ ] Aura 代理层服务 (篡改上报数据 / 欺骗冰冻状态)
 - [ ] 窥屏提醒
 - [ ] 插件功能
 
@@ -90,7 +103,9 @@
 
 ## 🎉 鸣谢
 
-![HugoAura-README_Special_Thanks](https://s2.loli.net/2025/11/24/W9nqjxi5EcJPtLN.png)
+Thanks goes to these wonderful people:
+
+[![Contributors](https://contrib.rocks/image?repo=blingbling-bow/HugoAura-Enhanced)](https://github.com/blingbling-bow/HugoAura-Enhanced/graphs/contributors)
 
 ## ❗ 免责声明
 
