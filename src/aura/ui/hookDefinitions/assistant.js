@@ -10,9 +10,9 @@ const def = {
       pageURI: "ui/pages/headerIcon/headerIcon.html",
       pageScript: "ui/pages/headerIcon/headerIcon.js",
       pageSelector: [
+        "prefix:index__feedback__",
         ".index__feedback__2XvUK2qe",
-        ".index__button3__1o6rmeo5",
-        ".index__header__3MZ6naLK",
+        "prefix:index__header__",
         ".index__header__16DmR2a5",
       ],
       selectorMode: "insertAfter",

@@ -4,6 +4,19 @@
 
     for (const selector of selectorList) {
       if (!selector) continue;
+
+      // "prefix:index__xxx__" => 按 CSS Module 类名前缀模糊匹配,
+      // 末尾 hash 随版本变化时依旧命中 (仅遍历含 "index__" 的元素, 开销可控)
+      if (selector.startsWith("prefix:")) {
+        const prefix = selector.slice("prefix:".length);
+        const candidates = document.querySelectorAll("[class*='index__']");
+        for (const el of candidates) {
+          const cls = String(el.className || "").split(/\s+/);
+          if (cls.some((c) => c.startsWith(prefix))) return el;
+        }
+        continue;
+      }
+
       const element = document.querySelector(selector);
       if (element) return element;
     }

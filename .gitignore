@@ -9,6 +9,8 @@ app.asar/node_modules
 app.asar/public
 app.asar/main.js
 app.asar/package.json
+app.asar
+.asar_extracted/
 assets/
 
 autoConfiguration.json
