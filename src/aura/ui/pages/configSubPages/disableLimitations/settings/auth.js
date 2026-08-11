@@ -406,6 +406,100 @@ const authSettings = [
       },
     ],
   },
+  {
+    id: 3,
+    categoryName: "屏幕保护",
+    child: [
+      {
+        index: 0,
+        id: "disableScreenSaver",
+        type: "switch",
+        name: "禁用屏幕保护",
+        description:
+          "拦截集控下发的屏幕保护指令, 屏幕将永不进入屏保状态",
+        restart: false,
+        reload: false,
+        tip: true,
+        tipTitle:
+          "作用于希沃管家自身的屏幕保护 (集控通过 /displayScreenSaver 消息触发), 不影响 Windows 系统屏保",
+        warning: true,
+        warningContent:
+          "关闭后集控端可能检测不到屏保状态, 请在启用前确认学校集控策略",
+        associateVal: null,
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.auraSettings.disableScreenSaver;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.auraSettings.disableScreenSaver = newVal;
+        },
+      },
+    ],
+  },
+  {
+    id: 4,
+    categoryName: "管家更新",
+    child: [
+      {
+        index: 0,
+        id: "disableUpdate",
+        type: "switch",
+        name: "禁止管家更新",
+        description:
+          "拦截集控下发的升级状态与升级触发请求, 希沃管家将不会升级到新版本",
+        restart: false,
+        reload: false,
+        tip: true,
+        tipTitle:
+          "同时拦截: 1) 集控下发的升级状态/反馈消息 (前端不显示升级入口与进度) 2) 前端升级触发请求 upgradeLastVersion (网络层兜底)",
+        warning: true,
+        warningContent:
+          "管家版本将停留在当前版本, 请确认该版本满足学校集控对管家最低版本的要求",
+        associateVal: null,
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.auraSettings.disableUpdate;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.auraSettings.disableUpdate = newVal;
+          global.__HUGO_AURA_CONFIG__.networkRewrite.disableAppUpdate.enabled =
+            newVal;
+        },
+      },
+      {
+        index: 1,
+        id: "cloudUpdateIntercept",
+        type: "switch",
+        name: "云端更新指令全面拦截",
+        description:
+          "在云端指令到达执行模块前, 实时捕获并拦截所有更新指令, 记录指令内容/时间/来源到审计日志",
+        restart: false,
+        reload: false,
+        tip: true,
+        tipTitle:
+          "拦截点: SeewoProxyHTTP 与 proxyWebsocketHost 两条 WS 连接的总入口。启用后所有云端更新指令 (含升级状态/反馈/固件升级) 均被拦截, 并写入 logs/cloudCommandAudit.log",
+        warning: true,
+        warningContent:
+          "拦截发生在指令分发前, 可阻止更新类指令到达执行模块。审计日志位于 HugoAura 数据目录 logs/cloudCommandAudit.log",
+        associateVal: null,
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.auraSettings.cloudUpdateIntercept
+            .enabled;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.auraSettings.cloudUpdateIntercept.enabled =
+            newVal;
+        },
+      },
+    ],
+  },
 ];
 
 module.exports = { authSettings };

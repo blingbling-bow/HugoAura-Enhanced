@@ -1,0 +1,79 @@
+// @ts-check
+
+/**
+ * 禁止管家更新 (Disable App Update) 主进程钩子
+ *
+ * 原理: 希沃管家的升级由集控驱动, 链路为:
+ *   集控通过代理 WS (模块390, proxyWebsocketHost) 下发:
+ *     - /serviceUpgrade/status   -> 模块394 广播 UPGRADE_STATUS
+ *       (前端 assistant.js handleGetUpgradeStatus: status===1 时显示"升级"入口)
+ *     - /serviceUpgrade/feedback -> 模块394 广播 UPGRADE_FEEDBACK
+ *       (前端展示升级进度/失败提示)
+ *   用户点击升级入口后, 前端 POST /api/v1/serviceUpgrade/upgradeLastVersion 触发升级。
+ *
+ * 本钩子包装模块 394 的 onMessage, 在配置启用时吞掉
+ * /serviceUpgrade/status 与 /serviceUpgrade/feedback 消息,
+ * 使前端永远收不到"有更新"状态, 不显示升级入口与升级进度。
+ * (网络层兜底见 jsRewrite/network/disableAppUpdate.js,
+ *  负责拦截 upgradeLastVersion 升级触发请求。)
+ *
+ * 版本容错: 自检失败时优雅降级, 不影响 /disableCover 等其他消息。
+ */
+
+const hookFn = (central) => {
+  const readConfig = () => {
+    try {
+      const mgr = global.__HUGO_AURA_CONFIG_MGR__;
+      if (!mgr) return null;
+      return mgr.loadConfig();
+    } catch (err) {
+      console.error("[HugoAura / DisableUpdate / Error] Failed to read config:", err);
+      return null;
+    }
+  };
+
+  const shouldDisable = () => {
+    const config = readConfig();
+    return Boolean(config && config.auraSettings && config.auraSettings.disableUpdate);
+  };
+
+  try {
+    const messageHandler = central(394);
+
+    // 运行时自检: 模块 394 是否为升级状态分发器 (版本容错)
+    const isUpgradeMessageHandler =
+      messageHandler &&
+      typeof messageHandler.onMessage === "function" &&
+      String(messageHandler.onMessage).includes("/serviceUpgrade/status");
+
+    if (isUpgradeMessageHandler) {
+      const originalOnMessage = messageHandler.onMessage.bind(messageHandler);
+      messageHandler.onMessage = (e) => {
+        if (e && e.url) {
+          if (
+            shouldDisable() &&
+            (e.url === "/serviceUpgrade/status" ||
+              e.url === "/serviceUpgrade/feedback")
+          ) {
+            console.debug(
+              `[HugoAura / DisableUpdate] Blocked upgrade message: ${e.url}`
+            );
+            return;
+          }
+        }
+        // /disableCover 等其他消息正常透传
+        originalOnMessage(e);
+      };
+
+      console.log("[HugoAura / DisableUpdate] Source interception installed (module 394).");
+    } else {
+      console.warn(
+        "[HugoAura / DisableUpdate] Module 394 is not the upgrade message handler, interception skipped."
+      );
+    }
+  } catch (err) {
+    console.error("[HugoAura / DisableUpdate / Error]", err);
+  }
+};
+
+module.exports = { hookFunc: hookFn };

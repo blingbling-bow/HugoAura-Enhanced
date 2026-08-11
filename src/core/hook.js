@@ -144,6 +144,20 @@ const launcher = ({ central, windowName, config }) => {
     global.__HUGO_AURA__.ipcInit = true;
   }
 
+  // >>> Init Aura Hooks (guarded: 仅安装一次, 防止多窗口重入) <<< //
+  if (!global.__HUGO_AURA__.auraHooksInstalled) {
+    const disableScreensaverHook = require("../aura/mainProcess/hooks/disableScreensaver");
+    disableScreensaverHook.hookFunc(central);
+
+    const disableUpdateHook = require("../aura/mainProcess/hooks/disableUpdate");
+    disableUpdateHook.hookFunc(central);
+
+    const cloudUpdateInterceptor = require("../aura/mainProcess/hooks/cloudUpdateInterceptor");
+    cloudUpdateInterceptor.hookFunc(central);
+
+    global.__HUGO_AURA__.auraHooksInstalled = true;
+  }
+
   // >>> Init Main Process Hooks <<< //
   const mainProcessHooksManager = new MainProcessHooksManager();
 
