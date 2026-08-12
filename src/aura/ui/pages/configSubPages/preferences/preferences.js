@@ -7,6 +7,7 @@
   const { auraSettings } = require(`${pathBase}/aura`);
   const { debugSettings } = require(`${pathBase}/debug`);
   const { aboutContent } = require(`${pathBase}/about`);
+  const { initAuditSubPage } = require(`${pathBase}/auditLog`);
 
   const initAuraSubPage = () => {
     const auraSettingsSubPageEl = document.getElementById("aura-subpage");
@@ -27,6 +28,7 @@
     initAuraSubPage();
     initDebugSubPage();
     initAboutSubPage();
+    initAuditSubPage();
 
     const rootEl = document.getElementById("acs-preferences-root-el");
     setTimeout(() => {

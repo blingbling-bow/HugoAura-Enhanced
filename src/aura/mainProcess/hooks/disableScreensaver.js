@@ -19,6 +19,8 @@
  *    eyeProtectionMode === "pause" 检查保留不变, 两者互不干扰。
  */
 
+const { withRetry } = require("./retryHook");
+
 const hookFn = (central) => {
   const readConfig = () => {
     try {
@@ -42,7 +44,8 @@ const hookFn = (central) => {
   let resetReportPending = false;
 
   // >>> 风险2: 源头拦截 (独立 try-catch, 不影响窗口守卫) <<< //
-  try {
+  // 懒加载容错: 模块未就绪时延迟重试, 直到就绪或放弃
+  const tryInstallSource = () => {
     const screensaver = central(121);
 
     // 运行时自检: 模块 121 是否为屏保管理器
@@ -53,52 +56,54 @@ const hookFn = (central) => {
       typeof screensaver.stopScreensaver === "function" &&
       String(screensaver.onMessage).includes("/displayScreenSaver");
 
-    if (isScreensaverManager) {
-      originalStopScreensaver = screensaver.stopScreensaver.bind(screensaver);
-
-      const originalOnMessage = screensaver.onMessage.bind(screensaver);
-      screensaver.onMessage = (e) => {
-        if (shouldDisable() && e && e.url === "/displayScreenSaver") {
-          console.debug("[HugoAura / Screensaver] Blocked screen saver trigger message.");
-          // 风险1: 主动上报 "屏保已关闭", 避免集控侧状态卡死
-          // stopScreensaver 会执行: closeWindow(无窗口,无操作) + share(null) + 上报 reset + outQueue
-          if (!resetReportPending) {
-            resetReportPending = true;
-            setTimeout(() => {
-              try {
-                originalStopScreensaver();
-                console.debug("[HugoAura / Screensaver] Reported screen saver reset to controller.");
-              } catch (err) {
-                console.error("[HugoAura / Screensaver] Failed to report reset:", err);
-              } finally {
-                resetReportPending = false;
-              }
-            }, 100);
-          }
-          return;
-        }
-        // 风险4: 配置关闭时完全透传, 原逻辑中的护眼模式检查保留
-        originalOnMessage(e);
-      };
-
-      const originalStartScreensaver = screensaver.startScreensaver.bind(screensaver);
-      screensaver.startScreensaver = () => {
-        if (shouldDisable()) {
-          console.debug("[HugoAura / Screensaver] Blocked startScreensaver.");
-          return;
-        }
-        originalStartScreensaver();
-      };
-
-      console.log("[HugoAura / Screensaver] Source interception installed (module 121).");
-    } else {
-      console.warn(
-        "[HugoAura / Screensaver] Module 121 is not the screensaver manager, source interception skipped."
+    if (!isScreensaverManager) {
+      console.debug(
+        "[HugoAura / Screensaver] Module 121 not ready, retrying..."
       );
+      return false;
     }
-  } catch (err) {
-    console.error("[HugoAura / Screensaver / Source / Error]", err);
-  }
+
+    originalStopScreensaver = screensaver.stopScreensaver.bind(screensaver);
+
+    const originalOnMessage = screensaver.onMessage.bind(screensaver);
+    screensaver.onMessage = (e) => {
+      if (shouldDisable() && e && e.url === "/displayScreenSaver") {
+        console.debug("[HugoAura / Screensaver] Blocked screen saver trigger message.");
+        // 风险1: 主动上报 "屏保已关闭", 避免集控侧状态卡死
+        // stopScreensaver 会执行: closeWindow(无窗口,无操作) + share(null) + 上报 reset + outQueue
+        if (!resetReportPending) {
+          resetReportPending = true;
+          setTimeout(() => {
+            try {
+              originalStopScreensaver();
+              console.debug("[HugoAura / Screensaver] Reported screen saver reset to controller.");
+            } catch (err) {
+              console.error("[HugoAura / Screensaver] Failed to report reset:", err);
+            } finally {
+              resetReportPending = false;
+            }
+          }, 100);
+        }
+        return;
+      }
+      // 风险4: 配置关闭时完全透传, 原逻辑中的护眼模式检查保留
+      originalOnMessage(e);
+    };
+
+    const originalStartScreensaver = screensaver.startScreensaver.bind(screensaver);
+    screensaver.startScreensaver = () => {
+      if (shouldDisable()) {
+        console.debug("[HugoAura / Screensaver] Blocked startScreensaver.");
+        return;
+      }
+      originalStartScreensaver();
+    };
+
+    console.log("[HugoAura / Screensaver] Source interception installed (module 121).");
+    return true;
+  };
+
+  withRetry(tryInstallSource, { label: "ScreensaverSource" })();
 
   // >>> 窗口守卫 (独立 try-catch, 版本无关兜底) <<< //
   try {

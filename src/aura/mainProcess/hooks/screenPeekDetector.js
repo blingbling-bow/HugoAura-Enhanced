@@ -19,6 +19,8 @@
 const path = require("path");
 const fs = require("fs");
 
+const { withRetry } = require("./retryHook");
+
 const hookFn = (central) => {
   const electron = central(1);
 
@@ -107,6 +109,21 @@ const hookFn = (central) => {
     }
   };
 
+  // 实时推送审计事件到渲染层 (指令审计可视化页面监听)
+  const pushAuditEvent = (record) => {
+    try {
+      if (
+        electron &&
+        electron.ipcMain &&
+        typeof electron.ipcMain.send === "function"
+      ) {
+        electron.ipcMain.send("*", "$aura.audit.onLog", { record });
+      }
+    } catch (err) {
+      console.error("[HugoAura / ScreenPeek / Audit / Push Error]", err);
+    }
+  };
+
   const wrapWsClient = (moduleId, label, getSource) => {
     try {
       const client = central(moduleId);
@@ -116,11 +133,14 @@ const hookFn = (central) => {
         String(client.onMessage).includes("JSON.parse");
 
       if (!isWsClient) {
-        console.warn(
-          `[HugoAura / ScreenPeek] Module ${moduleId} is not a WS client, skipped.`
+        console.debug(
+          `[HugoAura / ScreenPeek] Module ${moduleId} not ready, retrying...`
         );
-        return;
+        return false;
       }
+
+      // 防止重试时重复包装 (onMessage 已存在我们的包裹标记)
+      if (client.__auraScreenPeekWrapped) return true;
 
       const originalOnMessage = client.onMessage.bind(client);
       client.onMessage = (rawMsg) => {
@@ -142,14 +162,16 @@ const hookFn = (central) => {
           const blocked = cfg.mode === "block" && state;
 
           if (cfg.logPeekEvents) {
-            writeAudit({
+            const record = {
               ts,
               source,
               channel: label,
               action: state ? "peek_start" : "peek_stop",
               blocked,
               data: parsed.data || null,
-            });
+            };
+            writeAudit(record);
+            pushAuditEvent(record);
           }
 
           notifyRenderer({ state, source, ts, blocked });
@@ -167,14 +189,19 @@ const hookFn = (central) => {
         return originalOnMessage(rawMsg);
       };
 
+      // 标记已包装, 防止重试重复安装
+      client.__auraScreenPeekWrapped = true;
+
       console.log(
         `[HugoAura / ScreenPeek] Installed on ${label} (module ${moduleId}).`
       );
+      return true;
     } catch (err) {
       console.error(
         `[HugoAura / ScreenPeek] Failed to wrap ${label}:`,
         err
       );
+      return false;
     }
   };
 
@@ -188,12 +215,20 @@ const hookFn = (central) => {
     }
   };
 
-  wrapWsClient(399, "hugoServiceWebsocket", () =>
-    getWsSource("hugoServiceWebsocket")
-  );
-  wrapWsClient(390, "proxyWebsocketHost", () =>
-    getWsSource("proxyWebsocketHost")
-  );
+  // 懒加载容错: 模块未就绪时延迟重试
+  withRetry(
+    () => wrapWsClient(399, "hugoServiceWebsocket", () =>
+      getWsSource("hugoServiceWebsocket")
+    ),
+    { label: "ScreenPeek(399)" }
+  )();
+
+  withRetry(
+    () => wrapWsClient(390, "proxyWebsocketHost", () =>
+      getWsSource("proxyWebsocketHost")
+    ),
+    { label: "ScreenPeek(390)" }
+  )();
 };
 
 module.exports = { hookFunc: hookFn };

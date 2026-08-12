@@ -20,6 +20,8 @@
  * 版本容错: 自检失败时优雅降级, 不影响 /disableCover 等其他消息。
  */
 
+const { withRetry } = require("./retryHook");
+
 const hookFn = (central) => {
   const readConfig = () => {
     try {
@@ -37,7 +39,8 @@ const hookFn = (central) => {
     return Boolean(config && config.auraSettings && config.auraSettings.disableUpdate);
   };
 
-  try {
+  // 单次安装尝试: 成功返回 true, 模块未就绪返回 false (触发重试)
+  const tryInstall = () => {
     const messageHandler = central(394);
 
     // 运行时自检: 模块 394 是否为升级状态分发器 (版本容错)
@@ -46,34 +49,37 @@ const hookFn = (central) => {
       typeof messageHandler.onMessage === "function" &&
       String(messageHandler.onMessage).includes("/serviceUpgrade/status");
 
-    if (isUpgradeMessageHandler) {
-      const originalOnMessage = messageHandler.onMessage.bind(messageHandler);
-      messageHandler.onMessage = (e) => {
-        if (e && e.url) {
-          if (
-            shouldDisable() &&
-            (e.url === "/serviceUpgrade/status" ||
-              e.url === "/serviceUpgrade/feedback")
-          ) {
-            console.debug(
-              `[HugoAura / DisableUpdate] Blocked upgrade message: ${e.url}`
-            );
-            return;
-          }
-        }
-        // /disableCover 等其他消息正常透传
-        originalOnMessage(e);
-      };
-
-      console.log("[HugoAura / DisableUpdate] Source interception installed (module 394).");
-    } else {
-      console.warn(
-        "[HugoAura / DisableUpdate] Module 394 is not the upgrade message handler, interception skipped."
+    if (!isUpgradeMessageHandler) {
+      console.debug(
+        "[HugoAura / DisableUpdate] Module 394 not ready, retrying..."
       );
+      return false;
     }
-  } catch (err) {
-    console.error("[HugoAura / DisableUpdate / Error]", err);
-  }
+
+    const originalOnMessage = messageHandler.onMessage.bind(messageHandler);
+    messageHandler.onMessage = (e) => {
+      if (e && e.url) {
+        if (
+          shouldDisable() &&
+          (e.url === "/serviceUpgrade/status" ||
+            e.url === "/serviceUpgrade/feedback")
+        ) {
+          console.debug(
+            `[HugoAura / DisableUpdate] Blocked upgrade message: ${e.url}`
+          );
+          return;
+        }
+      }
+      // /disableCover 等其他消息正常透传
+      originalOnMessage(e);
+    };
+
+    console.log("[HugoAura / DisableUpdate] Source interception installed (module 394).");
+    return true;
+  };
+
+  // 懒加载容错: 模块未就绪时延迟重试
+  withRetry(tryInstall, { label: "DisableUpdate" })();
 };
 
 module.exports = { hookFunc: hookFn };

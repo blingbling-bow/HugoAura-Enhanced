@@ -23,6 +23,8 @@
 const path = require("path");
 const fs = require("fs");
 
+const { withRetry } = require("./retryHook");
+
 // 更新指令默认拦截规则 (url 关键字/前缀匹配)
 const DEFAULT_BLOCK_RULES = [
   "/serviceUpgrade/", // 集控升级状态/反馈/触发
@@ -30,6 +32,23 @@ const DEFAULT_BLOCK_RULES = [
 ];
 
 const hookFn = (central) => {
+  const electron = central(1);
+
+  // 实时推送审计事件到渲染层 (指令审计可视化页面监听)
+  const pushAuditEvent = (record) => {
+    try {
+      if (
+        electron &&
+        electron.ipcMain &&
+        typeof electron.ipcMain.send === "function"
+      ) {
+        electron.ipcMain.send("*", "$aura.audit.onLog", { record });
+      }
+    } catch (err) {
+      console.error("[HugoAura / CloudInterceptor / Audit / Push Error]", err);
+    }
+  };
+
   const readConfig = () => {
     try {
       const mgr = global.__HUGO_AURA_CONFIG_MGR__;
@@ -107,6 +126,7 @@ const hookFn = (central) => {
   };
 
   // 包装 WS 客户端 onMessage: 捕获 + 拦截 + 日志
+  // 返回 true=已安装 / false=模块未就绪需重试
   // @param {number} moduleId WS 客户端模块 ID
   // @param {string} label 入口名称 (来源标识)
   // @param {() => string} getSource 获取来源地址
@@ -119,11 +139,14 @@ const hookFn = (central) => {
         String(client.onMessage).includes("JSON.parse");
 
       if (!isWsClient) {
-        console.warn(
-          `[HugoAura / CloudInterceptor] Module ${moduleId} is not a WS client, skipped.`
+        console.debug(
+          `[HugoAura / CloudInterceptor] Module ${moduleId} not ready, retrying...`
         );
-        return;
+        return false;
       }
+
+      // 防止重试时重复包装 (onMessage 已存在我们的包裹标记)
+      if (client.__auraCloudInterceptorWrapped) return true;
 
       const originalOnMessage = client.onMessage.bind(client);
       client.onMessage = (rawMsg) => {
@@ -148,27 +171,31 @@ const hookFn = (central) => {
 
         // 捕获: 记录所有云端指令
         if (cfg.mode === "log") {
-          writeAudit({
+          const record = {
             ts,
             source,
             channel: label,
             url,
             action: "captured",
             data: parsed && parsed.data !== undefined ? parsed.data : null,
-          });
+          };
+          writeAudit(record);
+          pushAuditEvent(record);
           return originalOnMessage(rawMsg);
         }
 
         // block 模式: 拦截更新指令
         if (isBlockedUrl(url, cfg.blockRules)) {
-          writeAudit({
+          const record = {
             ts,
             source,
             channel: label,
             url,
             action: "blocked",
             data: parsed && parsed.data !== undefined ? parsed.data : null,
-          });
+          };
+          writeAudit(record);
+          pushAuditEvent(record);
           console.log(
             `[HugoAura / CloudInterceptor] Blocked cloud command: ${url} from ${source}`
           );
@@ -179,14 +206,19 @@ const hookFn = (central) => {
         return originalOnMessage(rawMsg);
       };
 
+      // 标记已包装, 防止重试重复安装
+      client.__auraCloudInterceptorWrapped = true;
+
       console.log(
         `[HugoAura / CloudInterceptor] Installed on ${label} (module ${moduleId}).`
       );
+      return true;
     } catch (err) {
       console.error(
         `[HugoAura / CloudInterceptor] Failed to wrap ${label}:`,
         err
       );
+      return false;
     }
   };
 
@@ -202,14 +234,21 @@ const hookFn = (central) => {
   };
 
   // 入口 1: SeewoProxyHTTP WS (模块 399, 集控主连接)
-  wrapWsClient(399, "hugoServiceWebsocket", () =>
-    getWsSource("hugoServiceWebsocket")
-  );
+  // 懒加载容错: 模块未就绪时延迟重试
+  withRetry(
+    () => wrapWsClient(399, "hugoServiceWebsocket", () =>
+      getWsSource("hugoServiceWebsocket")
+    ),
+    { label: "CloudInterceptor(399)" }
+  )();
 
   // 入口 2: proxyWebsocketHost WS (模块 390, 代理/边缘连接)
-  wrapWsClient(390, "proxyWebsocketHost", () =>
-    getWsSource("proxyWebsocketHost")
-  );
+  withRetry(
+    () => wrapWsClient(390, "proxyWebsocketHost", () =>
+      getWsSource("proxyWebsocketHost")
+    ),
+    { label: "CloudInterceptor(390)" }
+  )();
 };
 
 module.exports = { hookFunc: hookFn };
