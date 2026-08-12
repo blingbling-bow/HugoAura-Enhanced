@@ -19,7 +19,7 @@
  *    eyeProtectionMode === "pause" 检查保留不变, 两者互不干扰。
  */
 
-const { withRetry } = require("./retryHook");
+const { withRetry, getPrototypeMethod } = require("./retryHook");
 
 const hookFn = (central) => {
   const readConfig = () => {
@@ -48,13 +48,17 @@ const hookFn = (central) => {
   const tryInstallSource = () => {
     const screensaver = central(121);
 
-    // 运行时自检: 模块 121 是否为屏保管理器
+    // 运行时自检: 模块 121 是否为屏保管理器实例
+    // 特征串 /displayScreenSaver 是模块作用域常量, 不在 onMessage 方法体内,
+    // 因此改用 onMessage 体内的字符串 + 三个方法的组合来确认身份。
+    const unboundOnMessage = getPrototypeMethod(screensaver, "onMessage");
     const isScreensaverManager =
       screensaver &&
       typeof screensaver.onMessage === "function" &&
       typeof screensaver.startScreensaver === "function" &&
       typeof screensaver.stopScreensaver === "function" &&
-      String(screensaver.onMessage).includes("/displayScreenSaver");
+      typeof unboundOnMessage === "function" &&
+      String(unboundOnMessage).includes("screensaverTransitionList");
 
     if (!isScreensaverManager) {
       console.debug(

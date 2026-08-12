@@ -23,7 +23,7 @@
 const path = require("path");
 const fs = require("fs");
 
-const { withRetry } = require("./retryHook");
+const { withRetry, getPrototypeMethod } = require("./retryHook");
 
 // 更新指令默认拦截规则 (url 关键字/前缀匹配)
 const DEFAULT_BLOCK_RULES = [
@@ -133,10 +133,19 @@ const hookFn = (central) => {
   const wrapWsClient = (moduleId, label, getSource) => {
     try {
       const client = central(moduleId);
+
+      // 运行时自检: 是否为 WS 客户端 (WebSocketManager 派生实例)
+      // 注意: onMessage 在构造器中被 bind, String(实例.onMessage) 恒为
+      // "[native code]", 必须取原型链上的未绑定方法做源码特征匹配;
+      // setHost/sendMessage 为基类方法, 用于确认 WS 客户端身份。
+      const unboundOnMessage = getPrototypeMethod(client, "onMessage");
       const isWsClient =
         client &&
         typeof client.onMessage === "function" &&
-        String(client.onMessage).includes("JSON.parse");
+        typeof client.setHost === "function" &&
+        typeof client.sendMessage === "function" &&
+        typeof unboundOnMessage === "function" &&
+        String(unboundOnMessage).includes("JSON.parse");
 
       if (!isWsClient) {
         console.debug(

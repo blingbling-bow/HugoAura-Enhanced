@@ -20,7 +20,7 @@
  * 版本容错: 自检失败时优雅降级, 不影响 /disableCover 等其他消息。
  */
 
-const { withRetry } = require("./retryHook");
+const { withRetry, getPrototypeMethod } = require("./retryHook");
 
 const hookFn = (central) => {
   const readConfig = () => {
@@ -44,10 +44,14 @@ const hookFn = (central) => {
     const messageHandler = central(394);
 
     // 运行时自检: 模块 394 是否为升级状态分发器 (版本容错)
+    // 特征串 /serviceUpgrade/status 是模块作用域常量, 不在 onMessage 方法体内,
+    // 因此改用 onMessage 体内的 UPGRADE_STATUS 字符串来确认身份。
+    const unboundOnMessage = getPrototypeMethod(messageHandler, "onMessage");
     const isUpgradeMessageHandler =
       messageHandler &&
       typeof messageHandler.onMessage === "function" &&
-      String(messageHandler.onMessage).includes("/serviceUpgrade/status");
+      typeof unboundOnMessage === "function" &&
+      String(unboundOnMessage).includes("UPGRADE_STATUS");
 
     if (!isUpgradeMessageHandler) {
       console.debug(

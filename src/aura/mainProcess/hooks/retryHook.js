@@ -25,6 +25,30 @@
  */
 
 /**
+ * 取实例方法在原型链上的"未绑定"版本。
+ *
+ * 背景: 希沃管家部分类在构造器中 bind 实例方法 (如 WebSocketManager 的
+ * `this.onMessage = this.onMessage.bind(this)`)。绑定函数的
+ * `String(fn)` 恒为 "function () { [native code] }", 无法做源码特征匹配;
+ * 必须取原型链上的原始方法才能拿到真实源码。
+ *
+ * @param {any} instance 实例对象
+ * @param {string} name 方法名
+ * @returns {Function | null} 原型链上找到的方法, 未找到返回 null
+ */
+const getPrototypeMethod = (instance, name) => {
+  if (!instance || (typeof instance !== "object" && typeof instance !== "function")) {
+    return null;
+  }
+  let proto = Object.getPrototypeOf(instance);
+  while (proto && proto !== Object.prototype) {
+    if (typeof proto[name] === "function") return proto[name];
+    proto = Object.getPrototypeOf(proto);
+  }
+  return null;
+};
+
+/**
  * @param {() => boolean} fn 安装函数, 返回 true=成功 / false=失败需重试
  * @param {RetryOptions} [options]
  * @returns {() => void} 启动重试流程的函数 (同步执行第一次尝试)
@@ -71,4 +95,4 @@ const withRetry = (fn, options = {}) => {
   return attempt;
 };
 
-module.exports = { withRetry };
+module.exports = { withRetry, getPrototypeMethod };
