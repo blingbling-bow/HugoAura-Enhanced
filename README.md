@@ -26,11 +26,10 @@
 >
 > 我们正在进行品牌形象更新, 本仓库 (`HugoAura/Seewo-HugoAura` / HugoAura SSA Electron Injection Loader) 将会逐渐改称 `HugoAura-Main`。这是为了区分 Project HugoAura 与 HugoAura SSA Electron Injection Loader 二者。
 
-> [!WARNING]
-> 我们正在使用 C++ 重构 PLS, 新的子项目代号为 [Aikari](https://github.com/HugoAura/HugoAura-Aikari)。其将集成 MQTT 消息中转、HugoAura 自动更新、特权操作辅助等功能。
->
-> 在 Aikari 的首个 Alpha 版本发布前, HugoAura 主项目与 [PLS](https://github.com/HugoAura/HugoAura-PLS) 的新功能更新频率将减弱。
->
+> [!WARNING]开发状态变更
+> ~~我们正在使用 C++ 重构 PLS, 新的子项目代号为 [Aikari-Next]，是一款针对希沃易+系列软件的全面调整的体验工具。通过细分模块，让用户对希沃易+软件获得更高的自由度、更好的用户体验。其将集成 MQTT 消息中转、HugoAura 自动更新、特权操作辅助等功能。~~
+> 由于个人技术能力有限，本项目中的 SeewoCore MQTT TLS 劫持部分（Aikari PLS 子功能）已停止开发。整个 TLS 握手链路涉及 mbedTLS 服务端配置、证书校验与协议层细节，远超我的技术处理范围，暂时无法突破。
+> 我已将全部实验记录、机制分析与未决问题整理成技术文档 SeewoCore_TLS_Interception_Manual.md ，供后续有能力、有兴趣的开发者参考。欢迎 fork 本仓库并继续推进这一课题，让这部分功能得以完成。
 > 您依然可以提出 Feature Request 或 Bug Report。开发者将在能力 / 时间限度内尽可能处理。
 
 > [!WARNING]
@@ -38,7 +37,7 @@
 > 这是 HugoAura-Main 的一个分支。请查看主仓库 [HugoAura/Seewo-HugoAura](https://github.com/HugoAura/Seewo-HugoAura/)
 
 > [!IMPORTANT]
-> 已经过测试的希沃管家版本: v1.6.6.3993
+> 已经过测试的希沃管家版本: v1.6.7.4008
 
 > [!IMPORTANT]
 > **温馨提示**：本项目有部分成分由**氛围编程 (Vibe Coding)** 方式编写。
@@ -72,7 +71,7 @@
 - [x] 阻止希沃管家前端 Audit 上报行为
 - [x] 屏蔽屏幕锁 / 自定义屏幕锁行为
 - [ ] Aura 代理层服务 (篡改上报数据 / 欺骗冰冻状态)
-- [ ] 窥屏提醒
+- [x] 窥屏提醒
 - [ ] 插件功能
 
 > [!WARNING]

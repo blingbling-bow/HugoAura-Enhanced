@@ -354,28 +354,47 @@ global.__HUGO_AURA_UI_FUNCTIONS__.config = {
     return match ? match[1].trim() : null;
   };
 
+  // 形如 1.6.6.3993 / 1.5.8.2447 的纯版本号, 用于过滤浏览器 UA 字符串等无效值
+  const VERSION_NUMBER_REGEX = /^\d+(\.\d+){1,4}$/;
+
   const getHugoVersion = () => {
+    // 1. 优先从安装路径提取产品版本号 (目录名 SeewoService_1.6.6.3993)
+    try {
+      const execPathVersion = extractVersionFromPath(window.process.execPath);
+      if (execPathVersion) return execPathVersion;
+    } catch (_err) {
+      // Ignore unavailable process globals.
+    }
+
+    // 2. 宿主全局数据 (注意: 该值可能是内部构建号, 需校验格式)
     try {
       const acceptDataVersion =
         window._ACCEPT_DATA &&
         window._ACCEPT_DATA.getData &&
         window._ACCEPT_DATA.getData("appVersion");
-      if (acceptDataVersion) return String(acceptDataVersion).trim();
+      if (acceptDataVersion) {
+        const version = String(acceptDataVersion).trim();
+        if (VERSION_NUMBER_REGEX.test(version)) return version;
+      }
     } catch (_err) {
       // The host may expose _ACCEPT_DATA before it is fully initialized.
     }
 
+    // 3. window.appVersion (Chromium 原生属性会返回 UA 字符串, 必须校验)
     try {
-      if (window.appVersion) return String(window.appVersion).trim();
+      const appVersion = String(window.appVersion || "").trim();
+      if (VERSION_NUMBER_REGEX.test(appVersion)) return appVersion;
     } catch (_err) {
       // Ignore unavailable host globals and continue with filesystem fallbacks.
     }
 
+    // 4. CUSTOM_CONFIG.root 路径中的 SeewoService_x.x.x.x 产品版本号
     const configuredRootVersion = extractVersionFromPath(
       window.CUSTOM_CONFIG && window.CUSTOM_CONFIG.root
     );
     if (configuredRootVersion) return configuredRootVersion;
 
+    // 5. 安装目录旁的 version 文件 (内部构建号, 兜底)
     try {
       const path = require("path");
       const fs = require("fs");
@@ -386,7 +405,7 @@ global.__HUGO_AURA_UI_FUNCTIONS__.config = {
         const versionPath = path.join(dir, "version");
         if (!fs.existsSync(versionPath)) continue;
         const version = fs.readFileSync(versionPath, "utf8").trim();
-        if (version) return version;
+        if (VERSION_NUMBER_REGEX.test(version)) return version;
       }
     } catch (_err) {
       // Ignore unavailable Node APIs or unreadable install files.

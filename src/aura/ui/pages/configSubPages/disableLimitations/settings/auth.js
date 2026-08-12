@@ -500,6 +500,62 @@ const authSettings = [
       },
     ],
   },
+  {
+    id: 5,
+    categoryName: "窥屏提醒",
+    child: [
+      {
+        index: 0,
+        id: "enableScreenPeekDetector",
+        type: "switch",
+        name: "启用窥屏提醒",
+        description:
+          "当集控端发起远程查看屏幕 (直播) 时, 实时弹窗提醒。审计日志写入 logs/screenPeekAudit.log",
+        restart: false,
+        reload: false,
+        tip: true,
+        tipTitle:
+          "监测点: 模块 399/390 两条 WS 连接的 /liveclient 指令。启用后, 收到直播开始指令时在屏幕右上角弹窗提醒",
+        associateVal: null,
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.auraSettings.screenPeekDetector
+            .enabled;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.auraSettings.screenPeekDetector.enabled =
+            newVal;
+        },
+      },
+      {
+        index: 1,
+        id: "screenPeekMode",
+        type: "radio",
+        name: "拦截模式",
+        description: "仅提醒 (不阻止直播) / 直接阻止 (对方无法查看屏幕)",
+        restart: false,
+        reload: false,
+        associateVal: ["auraSettings.screenPeekDetector.enabled"],
+        auraIf: () => {
+          return global.__HUGO_AURA_CONFIG__.auraSettings.screenPeekDetector
+            .enabled;
+        },
+        defaultValue: "notify",
+        templates: ["notify", "block"],
+        templateLabels: ["仅提醒", "直接阻止"],
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.auraSettings.screenPeekDetector
+            .mode;
+        },
+        callbackFn: (newVal) => {
+          global.__HUGO_AURA_CONFIG__.auraSettings.screenPeekDetector.mode =
+            newVal;
+        },
+      },
+    ],
+  },
 ];
 
 module.exports = { authSettings };

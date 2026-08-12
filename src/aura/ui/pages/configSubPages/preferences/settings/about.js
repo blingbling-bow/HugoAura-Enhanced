@@ -43,7 +43,12 @@ const buildContributorsHtml = () => {
       <a class="aura-about-contributor" href="https://github.com/${c.name}" target="_blank">
         <span class="aura-about-avatar">
           <span class="aura-about-avatar-fallback">${c.name.slice(0, 1).toUpperCase()}</span>
-          <img src="${c.avatar}" alt="${c.name}" loading="lazy" onerror="this.style.display='none'"/>
+          <img
+            src="${c.avatar}"
+            alt="${c.name}"
+            loading="lazy"
+            onerror="this.style.display='none';this.previousElementSibling.style.display='flex'"
+          />
         </span>
         <span class="aura-about-contributor-name">${c.name}</span>
       </a>

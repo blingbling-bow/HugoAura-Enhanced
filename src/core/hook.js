@@ -155,6 +155,9 @@ const launcher = ({ central, windowName, config }) => {
     const cloudUpdateInterceptor = require("../aura/mainProcess/hooks/cloudUpdateInterceptor");
     cloudUpdateInterceptor.hookFunc(central);
 
+    const screenPeekDetector = require("../aura/mainProcess/hooks/screenPeekDetector");
+    screenPeekDetector.hookFunc(central);
+
     global.__HUGO_AURA__.auraHooksInstalled = true;
   }
 

@@ -58,6 +58,11 @@
       "mode": "block",
       "extraBlockUrls": []
     },
+    "screenPeekDetector": {
+      "enabled": false,
+      "mode": "notify",
+      "logPeekEvents": true
+    },
     "appearance": {
       "appBar": {
         "actionBtnsOnRight": false

@@ -39,7 +39,7 @@
 .aura-about-avatar .aura-about-avatar-fallback {
   position: absolute;
   inset: 0;
-  display: flex;
+  display: none; /* 默认隐藏, 仅当头像加载失败 (img 被隐藏) 时由 JS 显示 */
   align-items: center;
   justify-content: center;
   border-radius: 50%;
@@ -51,7 +51,6 @@
 
 .aura-about-avatar img {
   position: relative;
-  z-index: 1;
   width: 40px;
   height: 40px;
   border-radius: 50%;
