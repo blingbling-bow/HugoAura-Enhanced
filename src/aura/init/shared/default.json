@@ -63,6 +63,14 @@
       "mode": "notify",
       "logPeekEvents": true
     },
+    "powerOffIntercept": {
+      "enabled": false,
+      "mode": "block"
+    },
+    "cloudCommandAudit": {
+      "enabled": false,
+      "retentionDays": 7
+    },
     "appearance": {
       "appBar": {
         "actionBtnsOnRight": false

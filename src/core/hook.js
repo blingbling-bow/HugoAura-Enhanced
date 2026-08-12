@@ -158,6 +158,9 @@ const launcher = ({ central, windowName, config }) => {
     const screenPeekDetector = require("../aura/mainProcess/hooks/screenPeekDetector");
     screenPeekDetector.hookFunc(central);
 
+    const powerOffInterceptor = require("../aura/mainProcess/hooks/powerOffInterceptor");
+    powerOffInterceptor.hookFunc(central);
+
     global.__HUGO_AURA__.auraHooksInstalled = true;
   }
 

@@ -556,6 +556,65 @@ const authSettings = [
       },
     ],
   },
+  {
+    id: 6,
+    categoryName: "远程关机",
+    child: [
+      {
+        index: 0,
+        id: "enablePowerOffIntercept",
+        type: "switch",
+        name: "拦截远程关机",
+        description:
+          "拦截集控下发的远程关机指令, 防止设备被远程关闭。审计日志写入 logs/cloudCommandAudit.log",
+        restart: false,
+        reload: false,
+        tip: true,
+        tipTitle:
+          "拦截点: 模块 399/390 两条 WS 连接的 /powerOff/confirm 指令。notify 模式放行但弹窗提醒, block 模式直接吞掉指令",
+        warning: true,
+        warningContent:
+          "启用后, 集控端将无法远程关闭你的设备。如果学校集控策略要求统一关机, 可能导致设备状态不一致",
+        associateVal: null,
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.auraSettings.powerOffIntercept
+            .enabled;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.auraSettings.powerOffIntercept.enabled =
+            newVal;
+        },
+      },
+      {
+        index: 1,
+        id: "powerOffMode",
+        type: "radio",
+        name: "拦截模式",
+        description: "仅提醒 (放行但弹窗通知) / 直接阻止 (设备不会被关机)",
+        restart: false,
+        reload: false,
+        associateVal: ["auraSettings.powerOffIntercept.enabled"],
+        auraIf: () => {
+          return global.__HUGO_AURA_CONFIG__.auraSettings.powerOffIntercept
+            .enabled;
+        },
+        defaultValue: "block",
+        templates: ["notify", "block"],
+        templateLabels: ["仅提醒", "直接阻止"],
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.auraSettings.powerOffIntercept
+            .mode;
+        },
+        callbackFn: (newVal) => {
+          global.__HUGO_AURA_CONFIG__.auraSettings.powerOffIntercept.mode =
+            newVal;
+        },
+      },
+    ],
+  },
 ];
 
 module.exports = { authSettings };

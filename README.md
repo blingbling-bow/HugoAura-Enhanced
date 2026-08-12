@@ -38,7 +38,7 @@
 > 这是 HugoAura-Main 的一个分支。请查看主仓库 [HugoAura/Seewo-HugoAura](https://github.com/HugoAura/Seewo-HugoAura/)
 
 > [!IMPORTANT]
-> 已经过测试的希沃管家版本: v1.6.7.4008
+> 已经过测试的希沃管家版本: v1.6.7.4010
 
 > [!IMPORTANT]
 > **温馨提示**：本项目有部分成分由**氛围编程 (Vibe Coding)** 方式编写。
@@ -76,6 +76,7 @@
 - [ ] 插件功能
 - [x] 禁用屏幕保护
 - [x] 禁止希沃管家自动更新
+- [x] 阻止远程关机
 
 > [!WARNING]
 > 画饼中.jpeg

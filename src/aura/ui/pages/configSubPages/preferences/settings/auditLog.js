@@ -35,8 +35,15 @@ const actionMeta = (entry) => {
     if (entry.action === "peek_stop")
       return { text: "窥屏结束", cls: "secondary" };
   }
+  if (entry._logType === "powerOff") {
+    if (entry.action === "blocked")
+      return { text: "关机已阻止", cls: "danger" };
+    if (entry.action === "captured")
+      return { text: "关机提醒", cls: "warning" };
+  }
   if (entry.action === "blocked") return { text: "已拦截", cls: "danger" };
   if (entry.action === "captured") return { text: "已捕获", cls: "primary" };
+  if (entry.action === "logged") return { text: "已记录", cls: "info" };
   return { text: entry.action || "-", cls: "secondary" };
 };
 
@@ -97,6 +104,11 @@ const renderStats = (filtered, all) => {
       label: "窥屏结束",
       value: count((e) => e.action === "peek_stop"),
       cls: "secondary",
+    },
+    {
+      label: "关机拦截",
+      value: count((e) => e._logType === "powerOff"),
+      cls: "danger",
     },
   ];
 
@@ -212,6 +224,8 @@ const installListener = () => {
       entry._logType =
         entry.action === "peek_start" || entry.action === "peek_stop"
           ? "peek"
+          : entry._logType === "powerOff"
+          ? "powerOff"
           : "cloud";
     }
     state.entries.unshift(entry);
@@ -239,6 +253,31 @@ const initAuditSubPage = () => {
       <hr class="aura-settings-hr-horizontal"/>
       <div class="aura-settings-entry">
         <div class="aura-settings-entry-info-container">
+          <p class="aura-settings-entry-title">全量记录云端指令</p>
+          <p class="aura-settings-entry-desc">
+            开启后记录所有云端下发指令(不限于更新/窥屏/关机), 便于排查; 关闭后仅记录被拦截的高危指令。
+          </p>
+        </div>
+        <div class="aura-settings-entry-operation-area">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch" id="auditLogAllSwitch"/>
+          </div>
+        </div>
+      </div>
+      <div class="aura-settings-entry">
+        <div class="aura-settings-entry-info-container">
+          <p class="aura-settings-entry-title">记录保留天数</p>
+          <p class="aura-settings-entry-desc">
+            超过该天数的审计记录将在写入时自动清除, 防止日志无限增长。
+          </p>
+        </div>
+        <div class="aura-settings-entry-operation-area">
+          <input class="form-control" type="number" id="auditRetentionDays" min="1" max="365" style="width: 120px"/>
+        </div>
+      </div>
+      <hr class="aura-settings-hr-horizontal"/>
+      <div class="aura-settings-entry">
+        <div class="aura-settings-entry-info-container">
           <p class="aura-settings-entry-title">指令记录</p>
           <p class="aura-settings-entry-desc">
             按时间倒序排列, 最多保留 600 条记录。
@@ -259,6 +298,7 @@ const initAuditSubPage = () => {
           <option value="all">全部类型</option>
           <option value="captured">已捕获</option>
           <option value="blocked">已拦截</option>
+          <option value="logged">全量记录</option>
           <option value="peek_start">窥屏开始</option>
           <option value="peek_stop">窥屏结束</option>
         </select>
@@ -292,6 +332,39 @@ const initAuditSubPage = () => {
   const typeFilter = document.getElementById("auditTypeFilter");
   const refreshBtn = document.getElementById("auditRefreshBtn");
   const clearBtn = document.getElementById("auditClearBtn");
+  const logAllSwitch = document.getElementById("auditLogAllSwitch");
+  const retentionInput = document.getElementById("auditRetentionDays");
+
+  // 初始化审计配置控件 (读取当前配置)
+  const initAuditControls = () => {
+    const auditCfg =
+      global.__HUGO_AURA_CONFIG__ &&
+      global.__HUGO_AURA_CONFIG__.auraSettings &&
+      global.__HUGO_AURA_CONFIG__.auraSettings.cloudCommandAudit;
+    if (!auditCfg) return;
+    logAllSwitch.checked = !!auditCfg.enabled;
+    retentionInput.value = auditCfg.retentionDays || 7;
+  };
+
+  // 保存审计配置 (全量记录 + 保留天数)
+  const saveAuditControls = () => {
+    try {
+      const auditCfg =
+        global.__HUGO_AURA_CONFIG__ &&
+        global.__HUGO_AURA_CONFIG__.auraSettings &&
+        global.__HUGO_AURA_CONFIG__.auraSettings.cloudCommandAudit;
+      if (!auditCfg) return;
+      auditCfg.enabled = logAllSwitch.checked;
+      const days = parseInt(retentionInput.value, 10);
+      auditCfg.retentionDays =
+        Number.isFinite(days) && days >= 1 && days <= 365 ? days : 7;
+      if (global.__HUGO_AURA_CONFIG_MGR__) {
+        global.__HUGO_AURA_CONFIG_MGR__.writeConfig(global.__HUGO_AURA_CONFIG__);
+      }
+    } catch (err) {
+      console.error("[HugoAura / Audit / Error] Failed to save audit config:", err);
+    }
+  };
 
   searchInput.addEventListener("input", (e) => {
     state.filterText = e.target.value.trim().toLowerCase();
@@ -303,7 +376,10 @@ const initAuditSubPage = () => {
   });
   refreshBtn.addEventListener("click", loadLogs);
   clearBtn.addEventListener("click", clearLogs);
+  logAllSwitch.addEventListener("change", saveAuditControls);
+  retentionInput.addEventListener("change", saveAuditControls);
 
+  initAuditControls();
   installListener();
   loadLogs();
 };

@@ -31,6 +31,34 @@ const DEFAULT_BLOCK_RULES = [
   "/firmwareUpgrade", // 固件升级
 ];
 
+/**
+ * 清理过期审计条目 (纯函数, 便于单测):
+ * 解析 JSON Lines 内容, 保留 ts >= cutoff 的行, 返回保留下来的行数组。
+ * @param {string} content 日志文件完整内容
+ * @param {number} cutoffTs 时间戳下限 (早于该时间的条目视为过期)
+ * @returns {{ kept: string[], removed: number }} 保留的行与删除数量
+ */
+const cleanExpiredEntries = (content, cutoffTs) => {
+  const kept = [];
+  let removed = 0;
+  for (const line of String(content).split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const rec = JSON.parse(trimmed);
+      const ts = rec.ts ? new Date(rec.ts).getTime() : NaN;
+      if (!isNaN(ts) && ts < cutoffTs) {
+        removed++;
+        continue;
+      }
+    } catch {
+      // 损坏行保留, 不删除
+    }
+    kept.push(trimmed);
+  }
+  return { kept, removed };
+};
+
 const hookFn = (central) => {
   const electron = central(1);
 
@@ -76,6 +104,20 @@ const hookFn = (central) => {
     };
   };
 
+  // 全量记录云端指令配置: auraSettings.cloudCommandAudit
+  const getAuditConfig = () => {
+    const config = readConfig();
+    const auditCfg =
+      config && config.auraSettings && config.auraSettings.cloudCommandAudit;
+    return {
+      enabled: !!(auditCfg && auditCfg.enabled),
+      retentionDays:
+        auditCfg && Number.isFinite(auditCfg.retentionDays) && auditCfg.retentionDays > 0
+          ? auditCfg.retentionDays
+          : 7,
+    };
+  };
+
   const isBlockedUrl = (url, rules) => {
     if (typeof url !== "string" || url.length === 0) return false;
     return rules.some((rule) => url.includes(rule));
@@ -114,9 +156,38 @@ const hookFn = (central) => {
     }
   };
 
-  const writeAudit = (record) => {
+  // 按天清理: 每次写入前惰性执行, 删除超过保留天数的历史记录
+  let lastCleanupAt = 0;
+  const cleanupExpiredAudit = (retentionDays) => {
+    try {
+      if (!auditFilePath || !fs.existsSync(auditFilePath)) return;
+      const now = Date.now();
+      // 距离上次清理不足 1 小时则跳过, 避免频繁读盘
+      if (now - lastCleanupAt < 3600 * 1000) return;
+      lastCleanupAt = now;
+
+      const cutoff = now - retentionDays * 24 * 3600 * 1000;
+      const content = fs.readFileSync(auditFilePath, "utf8");
+      if (!content) return;
+      const { kept, removed } = cleanExpiredEntries(content, cutoff);
+      if (removed > 0) {
+        // 先关闭 append 流, 避免与 writeFileSync 重写文件冲突 (offset 失效)
+        if (auditStream) auditStream.end();
+        fs.writeFileSync(auditFilePath, kept.length ? kept.join("\n") + "\n" : "", "utf8");
+        auditStream = fs.createWriteStream(auditFilePath, { flags: "a" });
+        console.log(
+          `[HugoAura / CloudInterceptor / Audit] Cleaned ${removed} expired entries (>${retentionDays}d).`
+        );
+      }
+    } catch (err) {
+      console.error("[HugoAura / CloudInterceptor / Audit / Cleanup Error]", err);
+    }
+  };
+
+  const writeAudit = (record, retentionDays = 7) => {
     try {
       if (!auditStream || !auditFilePath) return;
+      cleanupExpiredAudit(retentionDays);
       // 轮转检查: 超过上限时滚动
       try {
         const stats = fs.statSync(auditFilePath);
@@ -186,14 +257,30 @@ const hookFn = (central) => {
 
         const cfg = getInterceptConfig();
 
+        const url = parsed && parsed.url;
+        const source = getSource();
+        const ts = new Date().toISOString();
+
+        // 全量记录: 独立于拦截开关, 记录所有云端指令 (含非更新类)
+        const auditCfg = getAuditConfig();
+        if (auditCfg.enabled && typeof url === "string" && url.length > 0) {
+          const logRecord = {
+            ts,
+            source,
+            channel: label,
+            url,
+            action: "logged",
+            data: parsed && parsed.data !== undefined ? parsed.data : null,
+            _logType: "cloud",
+          };
+          writeAudit(logRecord, auditCfg.retentionDays);
+          pushAuditEvent(logRecord);
+        }
+
         // 功能未启用: 完全透传 (零开销)
         if (!cfg) {
           return originalOnMessage(rawMsg);
         }
-
-        const url = parsed && parsed.url;
-        const source = getSource();
-        const ts = new Date().toISOString();
 
         // 捕获: 记录所有云端指令
         if (cfg.mode === "log") {
@@ -205,7 +292,7 @@ const hookFn = (central) => {
             action: "captured",
             data: parsed && parsed.data !== undefined ? parsed.data : null,
           };
-          writeAudit(record);
+          writeAudit(record, auditCfg.retentionDays);
           pushAuditEvent(record);
           return originalOnMessage(rawMsg);
         }
@@ -220,7 +307,7 @@ const hookFn = (central) => {
             action: "blocked",
             data: parsed && parsed.data !== undefined ? parsed.data : null,
           };
-          writeAudit(record);
+          writeAudit(record, auditCfg.retentionDays);
           pushAuditEvent(record);
           console.log(
             `[HugoAura / CloudInterceptor] Blocked cloud command: ${url} from ${source}`
@@ -277,4 +364,4 @@ const hookFn = (central) => {
   )();
 };
 
-module.exports = { hookFunc: hookFn };
+module.exports = { hookFunc: hookFn, cleanExpiredEntries };
