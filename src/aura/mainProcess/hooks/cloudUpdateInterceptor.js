@@ -23,7 +23,7 @@
 const path = require("path");
 const fs = require("fs");
 
-const { withRetry, getPrototypeMethod } = require("./retryHook");
+const { withRetry, getPrototypeMethod, resolveModule } = require("./retryHook");
 
 // 更新指令默认拦截规则 (url 关键字/前缀匹配)
 const DEFAULT_BLOCK_RULES = [
@@ -33,6 +33,9 @@ const DEFAULT_BLOCK_RULES = [
 
 const hookFn = (central) => {
   const electron = central(1);
+
+  // 自检失败诊断日志: 每个模块只记录一次 (避免 30 次重试刷屏)
+  const diagLogged = {};
 
   // 实时推送审计事件到渲染层 (指令审计可视化页面监听)
   const pushAuditEvent = (record) => {
@@ -132,7 +135,8 @@ const hookFn = (central) => {
   // @param {() => string} getSource 获取来源地址
   const wrapWsClient = (moduleId, label, getSource) => {
     try {
-      const client = central(moduleId);
+      // 先取模块导出; 若 central 返回的是未执行工厂, resolveModule 会兜底执行
+      const client = resolveModule(central, moduleId);
 
       // 运行时自检: 是否为 WS 客户端 (WebSocketManager 派生实例)
       // 注意: onMessage 在构造器中被 bind, String(实例.onMessage) 恒为
@@ -148,6 +152,19 @@ const hookFn = (central) => {
         String(unboundOnMessage).includes("JSON.parse");
 
       if (!isWsClient) {
+        if (!diagLogged[moduleId]) {
+          diagLogged[moduleId] = true;
+          const proto = Object.getPrototypeOf(client);
+          console.warn(
+            `[HugoAura / CloudInterceptor] Module ${moduleId} self-check failed. ` +
+              `typeof(client)=${typeof client}, ` +
+              `onMessage=${client && typeof client.onMessage}, ` +
+              `setHost=${client && typeof client.setHost}, ` +
+              `sendMessage=${client && typeof client.sendMessage}, ` +
+              `proto.onMessage=${proto && typeof proto.onMessage}, ` +
+              `moduleTable=${!!(central.m && central.c)}`
+          );
+        }
         console.debug(
           `[HugoAura / CloudInterceptor] Module ${moduleId} not ready, retrying...`
         );

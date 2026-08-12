@@ -20,9 +20,11 @@
  * 版本容错: 自检失败时优雅降级, 不影响 /disableCover 等其他消息。
  */
 
-const { withRetry, getPrototypeMethod } = require("./retryHook");
+const { withRetry, getPrototypeMethod, resolveModule } = require("./retryHook");
 
 const hookFn = (central) => {
+  // 自检失败诊断日志: 只记录一次
+  let diagLogged = false;
   const readConfig = () => {
     try {
       const mgr = global.__HUGO_AURA_CONFIG_MGR__;
@@ -41,7 +43,8 @@ const hookFn = (central) => {
 
   // 单次安装尝试: 成功返回 true, 模块未就绪返回 false (触发重试)
   const tryInstall = () => {
-    const messageHandler = central(394);
+    // 先取模块导出; 若 central 返回的是未执行工厂, resolveModule 会兜底执行
+    const messageHandler = resolveModule(central, 394);
 
     // 运行时自检: 模块 394 是否为升级状态分发器 (版本容错)
     // 特征串 /serviceUpgrade/status 是模块作用域常量, 不在 onMessage 方法体内,
@@ -54,6 +57,17 @@ const hookFn = (central) => {
       String(unboundOnMessage).includes("UPGRADE_STATUS");
 
     if (!isUpgradeMessageHandler) {
+      if (!diagLogged) {
+        diagLogged = true;
+        const proto = Object.getPrototypeOf(messageHandler);
+        console.warn(
+          `[HugoAura / DisableUpdate] Module 394 self-check failed. ` +
+            `typeof(messageHandler)=${typeof messageHandler}, ` +
+            `onMessage=${messageHandler && typeof messageHandler.onMessage}, ` +
+            `proto.onMessage=${proto && typeof proto.onMessage}, ` +
+            `moduleTable=${!!(central.m && central.c)}`
+        );
+      }
       console.debug(
         "[HugoAura / DisableUpdate] Module 394 not ready, retrying..."
       );

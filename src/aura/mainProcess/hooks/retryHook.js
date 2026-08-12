@@ -49,6 +49,47 @@ const getPrototypeMethod = (instance, name) => {
 };
 
 /**
+ * 尝试获取模块的运行时导出 (带"工厂兜底")。
+ *
+ * 正常情况下 central(id) 即 webpack require, 直接返回模块实例。
+ * 兜底场景: 个别注入环境下, central 对"尚未被应用执行过"的懒加载模块
+ * 只返回模块工厂函数 (function(e,t,n)), 而非实例。此时若 central 暴露了
+ * webpack 模块表 (central.m / central.c), 可手动执行工厂得到实例,
+ * 并写入模块缓存, 保证应用后续真正加载该模块时复用同一个实例。
+ *
+ * @param {(id: number) => any} central 模块加载器
+ * @param {number} id 模块 ID
+ * @returns {any} 模块导出 (可能是实例)
+ */
+const resolveModule = (central, id) => {
+  let mod = central(id);
+  const isFactory =
+    mod &&
+    typeof mod === "function" &&
+    central.m &&
+    central.c &&
+    central.m[id] === mod;
+  if (isFactory) {
+    try {
+      const moduleObj = { i: id, l: false, exports: {} };
+      mod(moduleObj, moduleObj.exports, central);
+      mod = moduleObj.exports;
+      central.c[id] = moduleObj;
+      console.warn(
+        `[HugoAura / Retry] Module ${id} was a factory; executed manually and cached (fallback path).`
+      );
+    } catch (err) {
+      console.error(
+        `[HugoAura / Retry] Failed to execute module ${id} factory:`,
+        err
+      );
+      mod = central(id); // 还原原始返回, 下次重试再试
+    }
+  }
+  return mod;
+};
+
+/**
  * @param {() => boolean} fn 安装函数, 返回 true=成功 / false=失败需重试
  * @param {RetryOptions} [options]
  * @returns {() => void} 启动重试流程的函数 (同步执行第一次尝试)
@@ -95,4 +136,4 @@ const withRetry = (fn, options = {}) => {
   return attempt;
 };
 
-module.exports = { withRetry, getPrototypeMethod };
+module.exports = { withRetry, getPrototypeMethod, resolveModule };

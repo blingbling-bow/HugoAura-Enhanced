@@ -225,48 +225,68 @@ const initAuditSubPage = () => {
   if (!rootEl) return;
 
   rootEl.innerHTML = `
-    <div class="aura-audit-toolbar">
-      <div class="aura-audit-toolbar-search">
-        <input
-          id="auditSearchInput"
-          class="form-control form-control-sm"
-          type="text"
-          placeholder="搜索: URL / 来源 / 动作..."
-          autocomplete="off"
-        />
+    <div class="aura-settings-form aura-audit-form">
+      <p class="aura-settings-category-header">指令审计</p>
+      <div class="aura-settings-entry">
+        <div class="aura-settings-entry-info-container">
+          <p class="aura-settings-entry-title">审计日志概览</p>
+          <p class="aura-settings-entry-desc">
+            实时记录云端下发指令与窥屏检测事件, 支持搜索过滤与详情查看。
+          </p>
+        </div>
       </div>
-      <select id="auditTypeFilter" class="form-select form-select-sm aura-audit-toolbar-select">
-        <option value="all">全部类型</option>
-        <option value="captured">已捕获</option>
-        <option value="blocked">已拦截</option>
-        <option value="peek_start">窥屏开始</option>
-        <option value="peek_stop">窥屏结束</option>
-      </select>
-      <button id="auditRefreshBtn" type="button" class="btn btn-sm btn-outline-primary">
-        刷新
-      </button>
-      <button id="auditClearBtn" type="button" class="btn btn-sm btn-outline-danger">
-        清空日志
-      </button>
-    </div>
-    <div id="auditStatsContainer" class="aura-audit-stats"></div>
-    <div class="aura-audit-table-wrap">
-      <table class="table table-sm table-hover aura-audit-table">
-        <thead>
-          <tr>
-            <th style="width: 150px">时间</th>
-            <th style="width: 150px">来源</th>
-            <th>指令 URL</th>
-            <th style="width: 110px">动作</th>
-            <th style="width: 40%">数据</th>
-          </tr>
-        </thead>
-        <tbody id="auditTableBody"></tbody>
-      </table>
-    </div>
-    <p class="text-muted aura-audit-hint">
-      审计日志文件位于: &lt;HugoAura 数据目录&gt;/logs/cloudCommandAudit.log 与 screenPeekAudit.log
-    </p>`;
+      <div id="auditStatsContainer" class="aura-audit-stats"></div>
+      <hr class="aura-settings-hr-horizontal"/>
+      <div class="aura-settings-entry">
+        <div class="aura-settings-entry-info-container">
+          <p class="aura-settings-entry-title">指令记录</p>
+          <p class="aura-settings-entry-desc">
+            按时间倒序排列, 最多保留 600 条记录。
+          </p>
+        </div>
+      </div>
+      <div class="aura-audit-toolbar">
+        <div class="aura-audit-toolbar-search">
+          <input
+            id="auditSearchInput"
+            class="form-control form-control-sm"
+            type="text"
+            placeholder="搜索: URL / 来源 / 动作..."
+            autocomplete="off"
+          />
+        </div>
+        <select id="auditTypeFilter" class="form-select form-select-sm aura-audit-toolbar-select">
+          <option value="all">全部类型</option>
+          <option value="captured">已捕获</option>
+          <option value="blocked">已拦截</option>
+          <option value="peek_start">窥屏开始</option>
+          <option value="peek_stop">窥屏结束</option>
+        </select>
+        <button id="auditRefreshBtn" type="button" class="btn btn-sm btn-outline-primary">
+          刷新
+        </button>
+        <button id="auditClearBtn" type="button" class="btn btn-sm btn-outline-danger">
+          清空日志
+        </button>
+      </div>
+      <div class="aura-audit-table-wrap">
+        <table class="table table-sm table-hover aura-audit-table">
+          <thead>
+            <tr>
+              <th style="width: 150px">时间</th>
+              <th style="width: 150px">来源</th>
+              <th>指令 URL</th>
+              <th style="width: 110px">动作</th>
+              <th style="width: 35%">数据</th>
+            </tr>
+          </thead>
+          <tbody id="auditTableBody"></tbody>
+        </table>
+      </div>
+      <p class="aura-settings-entry-desc aura-audit-hint">
+        审计日志文件位于: &lt;HugoAura 数据目录&gt;/logs/cloudCommandAudit.log 与 screenPeekAudit.log
+      </p>
+    </div>`;
 
   const searchInput = document.getElementById("auditSearchInput");
   const typeFilter = document.getElementById("auditTypeFilter");

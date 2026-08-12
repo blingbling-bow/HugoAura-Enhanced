@@ -200,9 +200,44 @@ class ConfigManager {
       return config;
     } catch (err) {
       console.error("[HugoAura / Config] Failed to read config:", err);
+      // 配置文件可能因非原子写入损坏: 尝试从备份恢复
+      try {
+        const bakPath = this.configPath + ".bak";
+        if (fs.existsSync(bakPath)) {
+          const bakConfig = JSON.parse(fs.readFileSync(bakPath, "utf8"));
+          console.warn(
+            "[HugoAura / Config] Recovered config from backup (.bak)."
+          );
+          return bakConfig;
+        }
+      } catch (bakErr) {
+        console.error(
+          "[HugoAura / Config] Backup config is also unreadable:",
+          bakErr
+        );
+      }
       this.isConfigReadFailed = true;
       return this.getDefaultConfig();
     }
+  }
+
+  /**
+   * 原子写入明文配置: 先备份旧文件, 再写临时文件后重命名。
+   * 防止应用被强制结束 (断电/崩溃) 时 config.json 被写一半而损坏。
+   * @param {Record<any, any>} config
+   */
+  writePlainConfigSync(config) {
+    const json = JSON.stringify(config, null, 2);
+    try {
+      if (fs.existsSync(this.configPath)) {
+        fs.copyFileSync(this.configPath, this.configPath + ".bak");
+      }
+    } catch (err) {
+      console.error("[HugoAura / Config] Failed to backup config:", err);
+    }
+    const tmpPath = this.configPath + ".tmp";
+    fs.writeFileSync(tmpPath, json, "utf8");
+    fs.renameSync(tmpPath, this.configPath);
   }
 
   /**
@@ -223,19 +258,11 @@ class ConfigManager {
           console.warn(
             "[HugoAura / Config / Write / WARN] Falling back to use plain config."
           );
-          fs.writeFileSync(
-            this.configPath,
-            JSON.stringify(config, null, 2),
-            "utf8"
-          );
+          this.writePlainConfigSync(config);
           this.useEncConfig = false;
         }
       } else {
-        fs.writeFileSync(
-          this.configPath,
-          JSON.stringify(config, null, 2),
-          "utf8"
-        );
+        this.writePlainConfigSync(config);
       }
 
       if (this.side === "renderer") {

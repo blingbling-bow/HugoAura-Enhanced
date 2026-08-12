@@ -19,7 +19,7 @@
  *    eyeProtectionMode === "pause" 检查保留不变, 两者互不干扰。
  */
 
-const { withRetry, getPrototypeMethod } = require("./retryHook");
+const { withRetry, getPrototypeMethod, resolveModule } = require("./retryHook");
 
 const hookFn = (central) => {
   const readConfig = () => {
@@ -42,11 +42,14 @@ const hookFn = (central) => {
   let originalStopScreensaver = null;
   // 防止多条屏保消息触发重复上报
   let resetReportPending = false;
+  // 自检失败诊断日志: 只记录一次
+  let diagLogged = false;
 
   // >>> 风险2: 源头拦截 (独立 try-catch, 不影响窗口守卫) <<< //
   // 懒加载容错: 模块未就绪时延迟重试, 直到就绪或放弃
   const tryInstallSource = () => {
-    const screensaver = central(121);
+    // 先取模块导出; 若 central 返回的是未执行工厂, resolveModule 会兜底执行
+    const screensaver = resolveModule(central, 121);
 
     // 运行时自检: 模块 121 是否为屏保管理器实例
     // 特征串 /displayScreenSaver 是模块作用域常量, 不在 onMessage 方法体内,
@@ -61,6 +64,19 @@ const hookFn = (central) => {
       String(unboundOnMessage).includes("screensaverTransitionList");
 
     if (!isScreensaverManager) {
+      if (!diagLogged) {
+        diagLogged = true;
+        const proto = Object.getPrototypeOf(screensaver);
+        console.warn(
+          `[HugoAura / Screensaver] Module 121 self-check failed. ` +
+            `typeof(screensaver)=${typeof screensaver}, ` +
+            `onMessage=${screensaver && typeof screensaver.onMessage}, ` +
+            `startScreensaver=${screensaver && typeof screensaver.startScreensaver}, ` +
+            `stopScreensaver=${screensaver && typeof screensaver.stopScreensaver}, ` +
+            `proto.onMessage=${proto && typeof proto.onMessage}, ` +
+            `moduleTable=${!!(central.m && central.c)}`
+        );
+      }
       console.debug(
         "[HugoAura / Screensaver] Module 121 not ready, retrying..."
       );

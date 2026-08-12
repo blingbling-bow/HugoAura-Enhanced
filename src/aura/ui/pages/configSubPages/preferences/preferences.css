@@ -67,47 +67,69 @@
 
 /* ===== 指令审计子页样式 ===== */
 
+.aura-audit-form {
+  padding: 0.5rem 1.5rem;
+}
+
+/* --- 工具栏 --- */
+
 .aura-audit-toolbar {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0 0.75rem;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
 }
 
 .aura-audit-toolbar-search {
   flex: 1;
-  min-width: 180px;
+  min-width: 200px;
 }
 
 .aura-audit-toolbar-select {
   width: auto;
-  min-width: 120px;
+  min-width: 130px;
 }
+
+/* --- 统计卡片 --- */
 
 .aura-audit-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
 }
 
 .aura-audit-stat-card {
-  border-radius: 8px;
-  padding: 0.5rem 0.6rem;
-  text-align: center;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(0, 0, 0, 0.02);
+  position: relative;
+  border-radius: 10px;
+  padding: 0.85rem 1rem 0.75rem 1.1rem;
+  background: rgba(0, 0, 0, 0.025);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  transition: border-color 0.15s, background 0.15s;
 }
+
+.aura-audit-stat-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 10px 0 0 10px;
+}
+
+.aura-audit-stat-primary::before { background: #0d6efd; }
+.aura-audit-stat-info::before { background: #0dcaf0; }
+.aura-audit-stat-danger::before { background: #dc3545; }
+.aura-audit-stat-warning::before { background: #fd7e14; }
+.aura-audit-stat-secondary::before { background: #6c757d; }
 
 .aura-audit-stat-value {
-  font-size: 1.1rem;
-  font-weight: 600;
-}
-
-.aura-audit-stat-label {
-  font-size: 0.72rem;
-  opacity: 0.75;
-  margin-top: 0.15rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .aura-audit-stat-primary .aura-audit-stat-value { color: #0d6efd; }
@@ -116,12 +138,22 @@
 .aura-audit-stat-warning .aura-audit-stat-value { color: #fd7e14; }
 .aura-audit-stat-secondary .aura-audit-stat-value { color: #6c757d; }
 
+.aura-audit-stat-label {
+  font-size: 0.75rem;
+  opacity: 0.65;
+  margin-top: 0.25rem;
+}
+
+/* --- 表格容器 --- */
+
 .aura-audit-table-wrap {
   max-height: 420px;
   overflow: auto;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 8px;
+  border-radius: 10px;
 }
+
+/* --- 表头 --- */
 
 .aura-audit-table {
   margin-bottom: 0;
@@ -130,31 +162,41 @@
 .aura-audit-table th {
   position: sticky;
   top: 0;
-  background: #f8f9fa;
+  background: #f1f3f5;
   z-index: 1;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
   white-space: nowrap;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 0.55rem 0.6rem;
 }
+
+/* --- 表体 --- */
 
 .aura-audit-table td {
   font-size: 0.8rem;
   vertical-align: middle;
+  padding: 0.45rem 0.6rem;
+  border-color: rgba(0, 0, 0, 0.05);
 }
 
 .aura-audit-cell-time,
 .aura-audit-cell-source {
   white-space: nowrap;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
+  opacity: 0.8;
 }
 
 .aura-audit-cell-url {
-  font-size: 0.75rem;
+  font-size: 0.76rem;
   word-break: break-all;
   color: #0d6efd;
 }
 
 .aura-audit-cell-data {
-  font-size: 0.75rem;
+  font-size: 0.76rem;
   color: #495057;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -162,7 +204,16 @@
   max-width: 0;
 }
 
+/* --- 空状态 --- */
+
+.aura-audit-table .text-center {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  opacity: 0.5;
+}
+
+/* --- 底部提示 --- */
+
 .aura-audit-hint {
-  font-size: 0.75rem;
-  margin: 0.5rem 0 0;
+  margin-top: 0.75rem;
 }
