@@ -8,7 +8,15 @@
  *
  * 贡献者数据: 头像 URL 硬编码为 GitHub 官方头像地址,
  * 加载失败时自动降级为用户名首字母占位 (避免网络不佳导致空白)。
+ *
+ * 检查更新: 调用主进程 $aura.update.check 查询 GitHub Releases 最新版本,
+ * 有更新时提供 $aura.update.openRelease 打开官方发布页。实际替换文件由
+ * HugoAura-Install 的 AuraInstaller.exe 完成, 不在本页执行。
  */
+
+const UPDATE_IPC_BASE = "$aura.update";
+const FALLBACK_RELEASES_URL =
+  "https://github.com/blingbling-bow/HugoAura-Enhanced/releases";
 
 const getEnvVersions = () => {
   try {
@@ -74,10 +82,28 @@ const buildAboutHtml = () => {
         <div class="aura-settings-entry-info-container">
           <p class="aura-settings-entry-title">版本信息</p>
           <p class="aura-settings-entry-desc">
-            HugoAura: v${versions.aura}<br/>
+            HugoAura: ${versions.aura}<br/>
             Electron: v${versions.electron}<br/>
             Node.js: v${versions.node}
           </p>
+        </div>
+      </div>
+      <hr class="aura-settings-hr-horizontal"/>
+      <p class="aura-settings-category-header">检查更新</p>
+      <div class="aura-settings-entry">
+        <div class="aura-settings-entry-info-container">
+          <p class="aura-settings-entry-title">HugoAura 版本更新</p>
+          <p class="aura-settings-entry-desc" id="auraUpdateStatus">
+            点击检查更新, 查询是否已有新版本。
+          </p>
+        </div>
+        <div class="aura-settings-entry-operation-area">
+          <button id="auraUpdateCheckBtn" type="button" class="btn btn-sm btn-outline-primary">
+            检查更新
+          </button>
+          <button id="auraUpdateOpenBtn" type="button" class="btn btn-sm btn-primary" style="display: none;">
+            前往下载
+          </button>
         </div>
       </div>
       <hr class="aura-settings-hr-horizontal"/>
@@ -104,4 +130,71 @@ const buildAboutHtml = () => {
 
 const aboutContent = buildAboutHtml();
 
-module.exports = { aboutContent };
+/**
+ * 初始化"关于项目"子页: 写入内容并绑定检查更新事件。
+ */
+const initAboutSubPage = () => {
+  const aboutSubPageEl = document.getElementById("about-subpage");
+  if (!aboutSubPageEl) return;
+
+  aboutSubPageEl.innerHTML = aboutContent;
+
+  const statusEl = document.getElementById("auraUpdateStatus");
+  const checkBtn = document.getElementById("auraUpdateCheckBtn");
+  const openBtn = document.getElementById("auraUpdateOpenBtn");
+  if (!statusEl || !checkBtn || !openBtn) return;
+
+  let latestHtmlUrl = FALLBACK_RELEASES_URL;
+
+  const setStatus = (text, cls = "") => {
+    statusEl.textContent = text;
+    statusEl.className = `aura-settings-entry-desc${cls ? " " + cls : ""}`;
+  };
+
+  const checkUpdate = async () => {
+    checkBtn.disabled = true;
+    openBtn.style.display = "none";
+    setStatus("正在检查更新...");
+
+    try {
+      const res = await global.ipcRenderer.invoke(`${UPDATE_IPC_BASE}.check`);
+      if (!res || !res.success) {
+        setStatus(`检查失败: ${(res && res.error) || "未知错误"}`, "ase-desc-error-hint");
+        return;
+      }
+
+      const data = res.data || {};
+      if (data.hasUpdate) {
+        latestHtmlUrl = data.htmlUrl || FALLBACK_RELEASES_URL;
+        setStatus(`发现新版本 ${data.remoteVersion}, 请前往下载安装。`);
+        openBtn.style.display = "";
+      } else {
+        setStatus(`已是最新版本 (当前 ${data.currentVersion || "unknown"})。`);
+      }
+    } catch (err) {
+      console.error("[HugoAura / About / Update] Check failed:", err);
+      setStatus(`检查失败: ${String(err)}`, "ase-desc-error-hint");
+    } finally {
+      checkBtn.disabled = false;
+    }
+  };
+
+  const openRelease = async () => {
+    try {
+      const res = await global.ipcRenderer.invoke(`${UPDATE_IPC_BASE}.openRelease`, {
+        htmlUrl: latestHtmlUrl,
+      });
+      if (!res || !res.success) {
+        setStatus(`打开下载页失败: ${(res && res.error) || "未知错误"}`, "ase-desc-error-hint");
+      }
+    } catch (err) {
+      console.error("[HugoAura / About / Update] Open release failed:", err);
+      setStatus(`打开下载页失败: ${String(err)}`, "ase-desc-error-hint");
+    }
+  };
+
+  checkBtn.addEventListener("click", checkUpdate);
+  openBtn.addEventListener("click", openRelease);
+};
+
+module.exports = { aboutContent, initAboutSubPage };
