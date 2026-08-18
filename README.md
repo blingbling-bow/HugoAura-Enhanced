@@ -7,14 +7,7 @@
 </div>
 
 > [!TIP]
-> HugoAura 的首个预览版已发布! [查看安装教程](https://github.com/blingbling-bow/HugoAura-Enhanced/wiki)
-
-> [!TIP]
-> 在[此处](https://docs.aurax.cc/)查看 HugoAura 的文档与安装教程
-
-> [!WARNING]
->
-> 我们正在进行品牌形象更新, 本仓库 (`HugoAura/Seewo-HugoAura` / HugoAura SSA Electron Injection Loader) 将会逐渐改称 `HugoAura-Main`。这是为了区分 Project HugoAura 与 HugoAura SSA Electron Injection Loader 二者。
+> 在[此处](https://github.com/blingbling-bow/HugoAura-Enhanced/wiki)查看 HugoAura 的文档与安装教程
 
 > [!WARNING]
 >
