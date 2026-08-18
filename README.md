@@ -7,7 +7,7 @@
 </div>
 
 > [!TIP]
-> HugoAura 的首个预览版已发布! [查看安装教程](https://github.com/HugoAura/HugoAura/wiki)
+> HugoAura 的首个预览版已发布! [查看安装教程](https://github.com/blingbling-bow/HugoAura-Enhanced/wiki)
 
 > [!TIP]
 > 在[此处](https://docs.aurax.cc/)查看 HugoAura 的文档与安装教程
@@ -88,8 +88,7 @@
 
 ## ⚡ 安装与使用
 
-~~请参阅 [Wiki](https://github.com/HugoAura/HugoAura/wiki) 以了解安装流程。~~
-Wiki已失效，将在不久后重新编写。
+请参阅 [Wiki](https://github.com/blingbling-bow/HugoAura-Enhanced/wiki) 以了解安装流程。
 
 ## 🤖 AIGC 声明
 
