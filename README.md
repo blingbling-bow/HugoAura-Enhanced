@@ -3,39 +3,26 @@
 <h1 align="center">HugoAura<br/>Enhanced</h1>
 <h4 align="center">下一代希沃管家注入式修改方案</h4>
 <div align="center">
-  <a href="https://github.com/HugoAura/HugoAura">首页</a> · <a href="https://hugo.aurax.cc/about">关于 (WIP)</a> · <a href="https://docs.aurax.cc/">文档</a> · <a href="https://github.com/HugoAura/HugoAura/issues">反馈</a> · <a href="https://forum.smart-teach.cn/t/hugoaura">社区</a>
+  <a href="https://github.com/blingbling-bow/HugoAura-Enhanced">首页</a> · <a href="https://github.com/blingbling-bow/HugoAura-Enhanced/issues">反馈</a> · <a href="https://forum.smart-teach.cn/t/hugoaura">社区</a>
 </div>
 
-<br />
-
-<center>
-  <a href="https://campus.seewo.com/iot-public/file/?key=iot_doc_seewoServiceUpdateLog">
-    <img src="https://docs.aurax.cc/static/img/emg_announcement_banner.png" />
-  </a>
-</center>
-
-<br />
-
 > [!TIP]
-> HugoAura 的首个预览版已发布! [查看安装教程](https://github.com/HugoAura/HugoAura/wiki)
-
-> [!TIP]
-> 在[此处](https://docs.aurax.cc/)查看 HugoAura 的文档与安装教程
-
-> [!WARNING]
->
-> 我们正在进行品牌形象更新, 本仓库 (`HugoAura/Seewo-HugoAura` / HugoAura SSA Electron Injection Loader) 将会逐渐改称 `HugoAura-Main`。这是为了区分 Project HugoAura 与 HugoAura SSA Electron Injection Loader 二者。
+> 在[此处](https://github.com/blingbling-bow/HugoAura-Enhanced/wiki)查看 HugoAura 的文档与安装教程
 
 > [!WARNING]
 >
 > ~~我们正在使用 C++ 重构 PLS, 新的子项目代号为 [Aikari-Next]，是一款针对希沃易+系列软件的全面调整的体验工具。通过细分模块，让用户对希沃易+软件获得更高的自由度、更好的用户体验。其将集成 MQTT 消息中转、HugoAura 自动更新、特权操作辅助等功能。~~
+> 
 > 由于个人技术能力有限，本项目中的 SeewoCore MQTT TLS 劫持部分（Aikari PLS 子功能）已停止开发。整个 TLS 握手链路涉及 mbedTLS 服务端配置、证书校验与协议层细节，远超我的技术处理范围，暂时无法突破。
+> 
 > 我已将全部实验记录、机制分析与未决问题整理成技术文档 SeewoCore_TLS_Interception_Manual.md ，供后续有能力、有兴趣的开发者参考。欢迎 fork 本仓库并继续推进这一课题，让这部分功能得以完成。
+> 
 > 您依然可以提出 Feature Request 或 Bug Report。开发者将在能力 / 时间限度内尽可能处理。
 
 > [!WARNING]
 >
-> 这是 HugoAura-Main 的一个分支。请查看主仓库 [HugoAura/Seewo-HugoAura](https://github.com/HugoAura/Seewo-HugoAura/)
+> ~~这是 HugoAura-Main 的一个分支。请查看主仓库 [HugoAura/Seewo-HugoAura](https://github.com/HugoAura/Seewo-HugoAura/)~~
+> 主仓库已失效，请以本仓库为准。
 
 > [!IMPORTANT]
 > 已经过测试的希沃管家版本: v1.6.7.4010
@@ -48,7 +35,7 @@
 > [!NOTE]
 > **社群信息**
 >
-> - [QQ 群 (用户自治)](https://qm.qq.com/q/buo7m9oHBK)
+> - [QQ 群 (用户自治，已禁言)](https://qm.qq.com/q/buo7m9oHBK)
 > - [Telegram 公告频道](https://t.me/HugoAura)
 > - [Telegram 群组](https://t.me/HugoAura_Chat)
 
@@ -79,7 +66,7 @@
 - [x] 阻止远程关机
 
 > [!WARNING]
-> 画饼中.jpeg
+> 画饼中.jpg
 
 ## 📷 屏幕截图
 
@@ -94,7 +81,7 @@
 
 ## ⚡ 安装与使用
 
-请参阅 [Wiki](https://github.com/HugoAura/HugoAura/wiki) 以了解安装流程。
+请参阅 [Wiki](https://github.com/blingbling-bow/HugoAura-Enhanced/wiki) 以了解安装流程。
 
 ## 🤖 AIGC 声明
 
