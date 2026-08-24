@@ -3,11 +3,11 @@
 <h1 align="center">HugoAura<br/>Enhanced</h1>
 <h4 align="center">下一代希沃管家注入式修改方案</h4>
 <div align="center">
-  <a href="https://github.com/blingbling-bow/HugoAura-Enhanced">首页</a> · <a href="https://github.com/blingbling-bow/HugoAura-Enhanced/issues">反馈</a> · <a href="https://forum.smart-teach.cn/t/hugoaura">社区</a>
+  <a href="https://github.com/blingbling-bow/HugoAura-Enhanced">首页</a> · <a href="https://hugoaura.pages.dev/about">关于 (WIP)</a> · <a href="https://hugoaura.pages.dev/">文档</a> ·<a href="https://github.com/blingbling-bow/HugoAura-Enhanced/issues">反馈</a> · <a href="https://forum.smart-teach.cn/t/hugoaura">社区</a>
 </div>
 
 > [!TIP]
-> 在[此处](https://github.com/blingbling-bow/HugoAura-Enhanced/wiki)查看 HugoAura 的文档与安装教程
+> 在[此处](https://hugoaura.pages.dev/)查看 HugoAura 的文档与安装教程
 
 > [!WARNING]
 >
@@ -81,7 +81,7 @@
 
 ## ⚡ 安装与使用
 
-请参阅 [Wiki](https://github.com/blingbling-bow/HugoAura-Enhanced/wiki) 以了解安装流程。
+请参阅 [文档](https://hugoaura.pages.dev/) 以了解安装流程。
 
 ## 🤖 AIGC 声明
 
