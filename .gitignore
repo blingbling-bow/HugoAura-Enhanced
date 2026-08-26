@@ -25,7 +25,9 @@ desktop.ini
 
 # Editor Files
 .vscode/
+.zcode
 
 # Misc
 *.bak
 .mimosa/
+Artifacts

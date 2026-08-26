@@ -1,0 +1,19 @@
+#aura-one-click-screen-lock {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2000;
+  border: 0;
+  border-radius: 20px;
+  padding: 0 18px;
+  height: 40px;
+  color: #fff;
+  background: rgba(41, 49, 69, 0.82);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
+  cursor: pointer;
+}
+
+#aura-one-click-screen-lock:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
