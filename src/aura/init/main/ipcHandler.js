@@ -83,7 +83,6 @@ const buildIpcMain = (electron) => {
   const { applyAikariIpcHandler } = require("./ipcModules/aikariIpcHandler");
   const { applyAuditIpcHandler } = require("./ipcModules/auditIpcHandler");
   const { applyAuraUpdateIpcHandler } = require("./ipcModules/auraUpdateIpcHandler");
-  const { applyScreenLockIpcHandler } = require("./ipcModules/screenLockIpcHandler");
 
   ipcMain.handle("$aura.base.restartApplication", async () => {
     app.relaunch();
@@ -97,7 +96,6 @@ const buildIpcMain = (electron) => {
   applyAikariIpcHandler(ipcMain);
   applyAuditIpcHandler(ipcMain);
   applyAuraUpdateIpcHandler(ipcMain);
-  applyScreenLockIpcHandler(ipcMain);
 };
 
 module.exports = { buildIpcMain };

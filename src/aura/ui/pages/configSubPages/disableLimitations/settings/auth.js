@@ -382,28 +382,6 @@ const authSettings = [
     child: [
       {
         index: 0,
-        id: "forceEnableScreenLock",
-        type: "switch",
-        name: "强制启用锁屏",
-        description: "启用后, 屏幕锁不会被禁用",
-        restart: true,
-        reload: false,
-        associateVal: ["rewrite.vendor/screenLock.fastfail"],
-        auraIf: () => true,
-        defaultValue: true,
-        valueGetter: () => {
-          return !global.__HUGO_AURA_CONFIG__.rewrite["vendor/screenLock"]
-            .fastfail;
-        },
-        callbackFn: (newVal) => {
-          if (typeof newVal !== "boolean") return;
-          global.__HUGO_AURA_CONFIG__.rewrite[
-            "vendor/screenLock"
-          ].fastfail = !newVal;
-        },
-      },
-      {
-        index: 1,
         id: "enableDevTools",
         type: "switch",
         name: "启用开发者工具",
@@ -424,6 +402,28 @@ const authSettings = [
         callbackFn: (newVal) => {
           if (typeof newVal !== "boolean") return;
           global.__HUGO_AURA_CONFIG__.devTools = newVal;
+        },
+      },
+      {
+        index: 1,
+        id: "forceEnableScreenLock",
+        type: "switch",
+        name: "强制启用锁屏",
+        description: "拦截集控下发的解锁指令, 强制保持屏幕锁启用",
+        restart: true,
+        reload: false,
+        associateVal: ["auraSettings.forceEnableScreenLock"],
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return Boolean(
+            global.__HUGO_AURA_CONFIG__.auraSettings.forceEnableScreenLock
+          );
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.auraSettings.forceEnableScreenLock =
+            newVal;
         },
       },
     ],

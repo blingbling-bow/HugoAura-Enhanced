@@ -3,37 +3,6 @@
 (() => {
   const MAX_AUTO_HIDE_ATTEMPTS = 12;
 
-  const installScreenLockButton = (attempt = 0) => {
-    if (document.getElementById("aura-one-click-screen-lock")) return;
-    const rootEl = document.getElementById("root");
-    if (!rootEl) {
-      if (attempt < MAX_AUTO_HIDE_ATTEMPTS) {
-        setTimeout(() => installScreenLockButton(attempt + 1), 250);
-      }
-      return;
-    }
-
-    const button = document.createElement("button");
-    button.id = "aura-one-click-screen-lock";
-    button.type = "button";
-    button.textContent = "一键锁屏";
-    button.title = "立即锁定屏幕";
-    button.addEventListener("click", async () => {
-      button.disabled = true;
-      try {
-        const result = await global.ipcRenderer.invoke(
-          "$aura.screenLock.userLock"
-        );
-        if (!result || !result.success) {
-          console.warn("[HugoAura] 一键锁屏失败", result);
-        }
-      } finally {
-        button.disabled = false;
-      }
-    });
-    rootEl.appendChild(button);
-  };
-
   const findMinimizeButton = () => {
     const selectors = [
       ".index__button2__2mhwC3oY",
@@ -79,7 +48,6 @@
 
   const onMounted = () => {
     applyHideSettings();
-    installScreenLockButton();
   };
 
   onMounted();

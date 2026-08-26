@@ -5,7 +5,7 @@
  */
 const def = {
   targets: {},
-  globalStyles: ["ui/css/global.css", "ui/css/pageGlobal/desktopAssistant.css"],
+  globalStyles: ["ui/css/global.css"],
   globalJS: ["ui/js/global.js", "ui/js/pageGlobal/desktopAssistant.js"],
   onLoaded: `
     console.log('[HugoAura / UI / Hooks / Desktop Assistant] Page loaded.');
