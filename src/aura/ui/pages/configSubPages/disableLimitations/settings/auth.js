@@ -404,28 +404,6 @@ const authSettings = [
           global.__HUGO_AURA_CONFIG__.devTools = newVal;
         },
       },
-      {
-        index: 1,
-        id: "forceEnableScreenLock",
-        type: "switch",
-        name: "强制启用锁屏",
-        description: "拦截集控下发的解锁指令, 强制保持屏幕锁启用",
-        restart: true,
-        reload: false,
-        associateVal: ["auraSettings.forceEnableScreenLock"],
-        auraIf: () => true,
-        defaultValue: false,
-        valueGetter: () => {
-          return Boolean(
-            global.__HUGO_AURA_CONFIG__.auraSettings.forceEnableScreenLock
-          );
-        },
-        callbackFn: (newVal) => {
-          if (typeof newVal !== "boolean") return;
-          global.__HUGO_AURA_CONFIG__.auraSettings.forceEnableScreenLock =
-            newVal;
-        },
-      },
     ],
   },
   {

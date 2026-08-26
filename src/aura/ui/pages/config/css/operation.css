@@ -118,7 +118,7 @@
 }
 
 .aura-config-page-operation-el.operation-el-show[aura-disabled="true"]::after {
-  content: "别急嘛, 还在开发呢...";
+  content: attr(data-disabled-message);
   font-size: 16px;
   opacity: 0;
   color: white;

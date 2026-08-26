@@ -75,7 +75,6 @@
       "enabled": false,
       "retentionDays": 7
     },
-    "forceEnableScreenLock": false,
     "appearance": {
       "appBar": {
         "actionBtnsOnRight": false

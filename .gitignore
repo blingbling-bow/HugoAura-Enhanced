@@ -31,3 +31,6 @@ desktop.ini
 *.bak
 .mimosa/
 Artifacts
+
+# Credentials
+*.git-credentials

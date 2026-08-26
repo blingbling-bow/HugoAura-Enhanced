@@ -161,9 +161,6 @@ const launcher = ({ central, windowName, config }) => {
     const powerOffInterceptor = require("../aura/mainProcess/hooks/powerOffInterceptor");
     powerOffInterceptor.hookFunc(central);
 
-    const forceScreenLock = require("../aura/mainProcess/hooks/forceScreenLock");
-    forceScreenLock.hookFunc(central);
-
     global.__HUGO_AURA__.auraHooksInstalled = true;
   }
 
