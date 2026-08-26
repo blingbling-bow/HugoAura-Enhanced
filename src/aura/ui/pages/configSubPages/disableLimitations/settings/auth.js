@@ -374,6 +374,85 @@ const authSettings = [
           return { valid: true };
         },
       },
+      {
+        index: 7,
+        id: "customScreenLockBg",
+        type: "switch",
+        name: "自定义锁屏背景",
+        description: "启用后, 使用自定义图片作为屏幕锁背景",
+        restart: true,
+        reload: false,
+        associateVal: [
+          "networkRewrite.appearance/customScreenLockBg.enabled",
+        ],
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/customScreenLockBg"
+          ].enabled;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/customScreenLockBg"
+          ].enabled = newVal;
+        },
+      },
+      {
+        index: 8,
+        id: "customScreenLockBgPath",
+        type: "input",
+        name: "背景图片路径或链接",
+        description: "支持 http(s) 链接或本地图片文件路径",
+        restart: true,
+        reload: false,
+        associateVal: [
+          "networkRewrite.appearance/customScreenLockBg.enabled",
+          "networkRewrite.appearance/customScreenLockBg.backgroundPath",
+        ],
+        auraIf: () => {
+          return global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/customScreenLockBg"
+          ].enabled;
+        },
+        defaultValue: "",
+        placeHolder: "输入图片路径或 http(s) 链接",
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/customScreenLockBg"
+          ].backgroundPath;
+        },
+        callbackFn: (newVal) => {
+          if (newVal === "" || !newVal) return { valid: true };
+          if (typeof newVal !== "string") {
+            return { valid: false, hint: "请输入图片路径或 http(s) 链接" };
+          }
+          if (/^https?:\/\//i.test(newVal)) {
+            global.__HUGO_AURA_CONFIG__.networkRewrite[
+              "appearance/customScreenLockBg"
+            ].backgroundPath = newVal;
+            return { valid: true };
+          }
+          const fs = require("fs");
+          if (!fs.existsSync(newVal)) {
+            return { valid: false, hint: "图片文件不存在" };
+          }
+          if (!fs.statSync(newVal).isFile()) {
+            return { valid: false, hint: "路径不是图片文件" };
+          }
+          if (!/\.(png|jpe?g|bmp|webp|gif)$/i.test(newVal)) {
+            return {
+              valid: false,
+              hint: "仅支持 png/jpg/jpeg/bmp/webp/gif 图片",
+            };
+          }
+          global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/customScreenLockBg"
+          ].backgroundPath = newVal;
+          return { valid: true };
+        },
+      },
     ],
   },
   {

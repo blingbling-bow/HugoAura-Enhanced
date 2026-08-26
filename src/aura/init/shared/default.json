@@ -37,6 +37,10 @@
     },
     "appearance/banAdBlockPrompt": {
       "enabled": false
+    },
+    "appearance/customScreenLockBg": {
+      "enabled": false,
+      "backgroundPath": ""
     }
   },
   "ssa": {
