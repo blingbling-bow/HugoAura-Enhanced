@@ -7,7 +7,53 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const nodeHttps = require("https");
+const crypto = require("crypto");
 const { fsComposables } = require("./fsIpcHandler");
+
+const normalizeSha256 = (value) => {
+  if (typeof value !== "string" || !/^[a-fA-F0-9]{64}$/.test(value)) {
+    return null;
+  }
+  return value.toLowerCase();
+};
+
+const getExpectedInstallerSha256 = (releaseData, deviceArch) => {
+  if (!releaseData || !releaseData.sha256) return null;
+  return normalizeSha256(releaseData.sha256[deviceArch]);
+};
+
+const isTrustedInstallerUrl = (value) => {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.hostname.length > 0 &&
+      !url.username &&
+      !url.password
+    );
+  } catch {
+    return false;
+  }
+};
+
+const calculateFileSha256 = (filePath) =>
+  new Promise((resolve, reject) => {
+    const hash = crypto.createHash("sha256");
+    const stream = fs.createReadStream(filePath);
+    stream.on("error", reject);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => resolve(hash.digest("hex")));
+  });
+
+const sha256Matches = (actual, expected) => {
+  const normalizedActual = normalizeSha256(actual);
+  const normalizedExpected = normalizeSha256(expected);
+  if (!normalizedActual || !normalizedExpected) return false;
+  return crypto.timingSafeEqual(
+    Buffer.from(normalizedActual, "hex"),
+    Buffer.from(normalizedExpected, "hex")
+  );
+};
 
 const functions = {
   querySvcDetail: (
@@ -79,9 +125,8 @@ const functions = {
     progressFilePath
   ) => {
     let dlResult = false;
-    if (fs.existsSync(path.join(path.dirname(binPath), ".force"))) {
-      dlResult = true;
-    } else {
+    {
+      // 下载、校验阶段的临时数据不应泄漏到安装阶段。
       // TODO: Channel selection
       const apiInfo = global.__HUGO_AURA_API__;
 
@@ -196,8 +241,11 @@ const functions = {
       // @ts-expect-error
       deviceArch = deviceArch.toLowerCase();
 
+      const releaseData = aikariVersionInfo && aikariVersionInfo.data;
       if (
-        !Object.keys(aikariVersionInfo.data.downloadUrl).includes(deviceArch)
+        !releaseData ||
+        !releaseData.downloadUrl ||
+        !Object.keys(releaseData.downloadUrl).includes(deviceArch)
       ) {
         callbackFn({
           id: "",
@@ -210,23 +258,76 @@ const functions = {
         return false;
       }
 
+      const downloadUrl = releaseData.downloadUrl[deviceArch];
+      const expectedSha256 = getExpectedInstallerSha256(
+        releaseData,
+        deviceArch
+      );
+      if (!isTrustedInstallerUrl(downloadUrl) || !expectedSha256) {
+        callbackFn({
+          id: "",
+          progress: 0,
+          status: "failed",
+          dlUrl: downloadUrl || null,
+          savePath: null,
+          message:
+            "安装器发布信息不可信: 必须使用 HTTPS 并提供对应架构的 SHA-256",
+        });
+        return false;
+      }
+
+      let completedDownloadTask = null;
       const downloadFilePromise = new Promise((resolve) => {
         fsComposables.downloadFile(
-          aikariVersionInfo.data.downloadUrl[deviceArch],
+          downloadUrl,
           binPath,
           (...args) => {
             if (args[0].status === "done") {
+              completedDownloadTask = args;
               resolve(true);
             } else if (args[0].status === "failed") {
               resolve(false);
+              callbackFn(...args);
+            } else {
+              callbackFn(...args);
             }
-
-            callbackFn(...args);
           }
         );
       });
 
       dlResult = await downloadFilePromise;
+      if (dlResult) {
+        let actualSha256 = null;
+        try {
+          actualSha256 = await calculateFileSha256(binPath);
+        } catch (error) {
+          console.error(
+            "[HugoAura / Aikari] Failed to calculate installer SHA-256:",
+            error
+          );
+        }
+        if (!sha256Matches(actualSha256, expectedSha256)) {
+          try {
+            if (fs.existsSync(binPath)) fs.unlinkSync(binPath);
+          } catch (error) {
+            console.error(
+              "[HugoAura / Aikari] Failed to remove untrusted installer:",
+              error
+            );
+          }
+          callbackFn({
+            id: "",
+            progress: 100,
+            status: "failed",
+            dlUrl: downloadUrl,
+            savePath: null,
+            message: "安装器 SHA-256 校验失败, 已拒绝执行并删除文件",
+          });
+          dlResult = false;
+        } else if (completedDownloadTask) {
+          callbackFn(...completedDownloadTask);
+        }
+      }
     }
 
     if (dlResult) {
@@ -912,4 +1013,11 @@ const applyAikariIpcHandler = (ipcMain) => {
   );
 };
 
-module.exports = { applyAikariIpcHandler };
+module.exports = {
+  applyAikariIpcHandler,
+  normalizeSha256,
+  getExpectedInstallerSha256,
+  isTrustedInstallerUrl,
+  calculateFileSha256,
+  sha256Matches,
+};

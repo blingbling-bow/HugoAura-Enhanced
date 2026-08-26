@@ -117,11 +117,12 @@ class RendererHooksManager {
 
         webContents
           .executeJavaScript(injectionScript, true)
-          .then(() =>
+          .then(() => {
+            global.__HUGO_AURA__.flushPendingIpcMessages?.(windowKey);
             console.log(
               `[HugoAura / RDH / Done / ${windowKey}] Injection script executed`
-            )
-          )
+            );
+          })
           .catch((err) =>
             console.error(
               `[HugoAura / RDH / Error / ${windowKey}] Failed to execute injection script:`,

@@ -2,6 +2,23 @@
 
 const __SCOPE = "main";
 
+const PENDING_MESSAGE_LIMIT = 100;
+
+const flushPendingMessages = (windowKey) => {
+  const pending = global.__HUGO_AURA__.pendingIpcMessages?.get(windowKey);
+  if (!pending || pending.length === 0) return;
+
+  const webContents = global.__HUGO_AURA__.hookedWindows
+    ?.get(windowKey)
+    ?.webContents;
+  if (!webContents) return;
+
+  global.__HUGO_AURA__.pendingIpcMessages.delete(windowKey);
+  pending.forEach(({ channel, data }) => {
+    if (!webContents.isDestroyed()) webContents.send(channel, data);
+  });
+};
+
 /**
  *
  * @param {import("electron")} electron
@@ -13,6 +30,10 @@ const buildIpcMain = (electron) => {
    */
   // @ts-expect-error
   const ipcMain = electron.ipcMain;
+
+  if (!global.__HUGO_AURA__.pendingIpcMessages) {
+    global.__HUGO_AURA__.pendingIpcMessages = new Map();
+  }
 
   /**
    *
@@ -64,17 +85,22 @@ const buildIpcMain = (electron) => {
     } else {
       const isWindowValid = global.__HUGO_AURA__.hookedWindows.has(windowKey);
       if (!isWindowValid) {
-        console.warn(
-          `[HugoAura / Main / IPC / WARN] Unknown windowKey: ${windowKey}, window may not have started yet.`
-        );
+        const pending =
+          global.__HUGO_AURA__.pendingIpcMessages.get(windowKey) || [];
+        if (pending.length >= PENDING_MESSAGE_LIMIT) pending.shift();
+        pending.push({ channel, data });
+        global.__HUGO_AURA__.pendingIpcMessages.set(windowKey, pending);
         return {
-          success: false,
+          success: true,
+          queued: true,
         };
       }
 
       sendDataToWebContents(windowKey, channel, data);
     }
   };
+
+  global.__HUGO_AURA__.flushPendingIpcMessages = flushPendingMessages;
 
   const { applyBaseIpcHandler } = require("./ipcModules/baseIpcHandler");
   const { applyDebugIpcHandler } = require("./ipcModules/debugIpcHandler");
