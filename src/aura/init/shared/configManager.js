@@ -354,7 +354,14 @@ class ConfigManager {
     }
 
     const randomSalt = crypto.randomBytes(CRYPTO_SETTINGS_AES.saltLength);
-    const key = crypto.scryptSync(macAddr, randomSalt, 32);
+    // Harden KDF cost to raise the cost of offline brute-forcing the
+    // low-entropy/discoverable MAC-derived key material.
+    const key = crypto.scryptSync(macAddr, randomSalt, 32, {
+      N: 131072,
+      r: 8,
+      p: 1,
+      maxmem: 256 * 1024 * 1024,
+    });
     const iv = crypto.randomBytes(CRYPTO_SETTINGS_AES.ivLength);
 
     const cipherIns = crypto.createCipheriv(CRYPTO_SETTINGS_AES.mode, key, iv, {
@@ -476,7 +483,12 @@ class ConfigManager {
       const authTag = Buffer.from(authTagHex, "hex");
       const encPasswd = Buffer.from(encPasswdHex, "utf-8").toString();
 
-      const key = crypto.scryptSync(macAddr, salt, 32);
+      const key = crypto.scryptSync(macAddr, salt, 32, {
+        N: 131072,
+        r: 8,
+        p: 1,
+        maxmem: 256 * 1024 * 1024,
+      });
       const decipherIns = crypto.createDecipheriv(
         CRYPTO_SETTINGS_AES.mode,
         key,
