@@ -35,11 +35,9 @@
 > [!NOTE]
 > **社群信息**
 >
-> - [QQ 群 (用户自治，已禁言)](https://qm.qq.com/q/buo7m9oHBK)
-> - [Telegram 公告频道](https://t.me/HugoAura)
+> - ~~[QQ 群 (用户自治，已禁言)](https://qm.qq.com/q/buo7m9oHBK)~~
+> - [Telegram 公告频道](https://t.me/HugoAuraEn)
 > - [Telegram 群组](https://t.me/HugoAura_Chat)
-
-![Repobeats](https://repobeats.axiom.co/api/embed/69b5be5daacef624b8f5e4b8966a0b5898439a22.svg "Repobeats analytics image")
 
 ## ✨ 概览
 
