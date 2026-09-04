@@ -21,6 +21,36 @@
 
 const { withRetry, getPrototypeMethod, resolveModule } = require("./retryHook");
 
+const isScreensaverManager = (value) => {
+  const onMessage = getPrototypeMethod(value, "onMessage");
+  return Boolean(
+    value &&
+      typeof value.onMessage === "function" &&
+      typeof value.startScreensaver === "function" &&
+      typeof value.stopScreensaver === "function" &&
+      typeof onMessage === "function" &&
+      String(onMessage).includes("screensaverTransitionList")
+  );
+};
+
+const resolveScreensaverManager = (central) => {
+  const preferred = resolveModule(central, 121);
+  if (isScreensaverManager(preferred)) return preferred;
+
+  // Module IDs are build-specific. Search webpack's module table by the
+  // stable method characteristic before executing a candidate factory.
+  const table = central && central.m;
+  if (table && typeof table === "object") {
+    for (const [id, factory] of Object.entries(table)) {
+      if (id === "121" || typeof factory !== "function") continue;
+      if (!String(factory).includes("screensaverTransitionList")) continue;
+      const candidate = resolveModule(central, Number(id));
+      if (isScreensaverManager(candidate)) return candidate;
+    }
+  }
+  return null;
+};
+
 const hookFn = (central) => {
   const readConfig = () => {
     try {
@@ -49,26 +79,15 @@ const hookFn = (central) => {
   // 懒加载容错: 模块未就绪时延迟重试, 直到就绪或放弃
   const tryInstallSource = () => {
     // 先取模块导出; 若 central 返回的是未执行工厂, resolveModule 会兜底执行
-    const screensaver = resolveModule(central, 121);
+    const screensaver = resolveScreensaverManager(central);
 
-    // 运行时自检: 模块 121 是否为屏保管理器实例
-    // 特征串 /displayScreenSaver 是模块作用域常量, 不在 onMessage 方法体内,
-    // 因此改用 onMessage 体内的字符串 + 三个方法的组合来确认身份。
-    const unboundOnMessage = getPrototypeMethod(screensaver, "onMessage");
-    const isScreensaverManager =
-      screensaver &&
-      typeof screensaver.onMessage === "function" &&
-      typeof screensaver.startScreensaver === "function" &&
-      typeof screensaver.stopScreensaver === "function" &&
-      typeof unboundOnMessage === "function" &&
-      String(unboundOnMessage).includes("screensaverTransitionList");
-
-    if (!isScreensaverManager) {
+    // 运行时自检: 确认定位到的模块确实是屏保管理器。
+    if (!isScreensaverManager(screensaver)) {
       if (!diagLogged) {
         diagLogged = true;
-        const proto = Object.getPrototypeOf(screensaver);
+        const proto = screensaver ? Object.getPrototypeOf(screensaver) : null;
         console.warn(
-          `[HugoAura / Screensaver] Module 121 self-check failed. ` +
+          `[HugoAura / Screensaver] Screensaver manager self-check failed. ` +
             `typeof(screensaver)=${typeof screensaver}, ` +
             `onMessage=${screensaver && typeof screensaver.onMessage}, ` +
             `startScreensaver=${screensaver && typeof screensaver.startScreensaver}, ` +
@@ -78,7 +97,7 @@ const hookFn = (central) => {
         );
       }
       console.debug(
-        "[HugoAura / Screensaver] Module 121 not ready, retrying..."
+        "[HugoAura / Screensaver] Screensaver manager not ready, retrying..."
       );
       return false;
     }
@@ -119,11 +138,35 @@ const hookFn = (central) => {
       originalStartScreensaver();
     };
 
-    console.log("[HugoAura / Screensaver] Source interception installed (module 121).");
+    console.log("[HugoAura / Screensaver] Source interception installed.");
     return true;
   };
 
   withRetry(tryInstallSource, { label: "ScreensaverSource" })();
+
+  // 最终兜底: 屏保任务最终通过窗口管理器创建 "screensaver" 窗口。
+  // 这样即使触发路径绕过管理器 onMessage/startScreensaver，也不会显示屏保。
+  try {
+    const windowManager = resolveModule(central, 20);
+    if (windowManager && typeof windowManager.newWindow === "function") {
+      const originalNewWindow = windowManager.newWindow.bind(windowManager);
+      windowManager.newWindow = (windowName, ...args) => {
+        if (shouldDisable() && windowName === "screensaver") {
+          console.debug(
+            "[HugoAura / Screensaver] Blocked screensaver window creation."
+          );
+          return null;
+        }
+        return originalNewWindow(windowName, ...args);
+      };
+      console.log("[HugoAura / Screensaver] Window creation interception installed.");
+    }
+  } catch (err) {
+    console.error(
+      "[HugoAura / Screensaver / WindowHook / Error] Failed to install:",
+      err
+    );
+  }
 
   // >>> 窗口守卫 (独立 try-catch, 版本无关兜底) <<< //
   try {
@@ -132,7 +175,10 @@ const hookFn = (central) => {
     if (app && typeof app.on === "function") {
       // 风险3: 精确匹配 screensaver.html, 避免误伤其他窗口
       const isScreensaverUrl = (url) => {
-        return typeof url === "string" && /\/screensaver\.html([?#]|$)/.test(url);
+        return (
+          typeof url === "string" &&
+          /(?:^|[\\/])screensaver(?:\.html)?(?:[?#/]|$)/i.test(url)
+        );
       };
 
       const destroyIfScreensaver = (browserWindow) => {
