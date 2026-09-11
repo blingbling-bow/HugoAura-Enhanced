@@ -404,6 +404,25 @@ const authSettings = [
           global.__HUGO_AURA_CONFIG__.devTools = newVal;
         },
       },
+      {
+        index: 1,
+        id: "disableWindowTopmost",
+        type: "switch",
+        name: "禁用窗口循环置顶",
+        description: "禁止希沃管家持续将受管控窗口保持在最前面",
+        restart: true,
+        reload: false,
+        tip: true,
+        tipTitle: "仅影响希沃管家窗口的循环置顶行为",
+        associateVal: null,
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => global.__HUGO_AURA_CONFIG__.auraSettings.disableWindowTopmost,
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.auraSettings.disableWindowTopmost = newVal;
+        },
+      },
     ],
   },
   {

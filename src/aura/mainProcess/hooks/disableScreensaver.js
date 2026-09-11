@@ -68,6 +68,22 @@ const hookFn = (central) => {
     return Boolean(config && config.auraSettings && config.auraSettings.disableScreenSaver);
   };
 
+  // 同步希沃全局配置中的置顶开关；其置顶队列每秒读取该值。
+  try {
+    const runtimeConfig = central(0);
+    if (runtimeConfig && Object.prototype.hasOwnProperty.call(runtimeConfig, "topMostForbidden")) {
+      Object.defineProperty(runtimeConfig, "topMostForbidden", {
+        configurable: true,
+        get: () => {
+          const config = readConfig();
+          return Boolean(config && config.auraSettings && config.auraSettings.disableWindowTopmost);
+        },
+      });
+    }
+  } catch (err) {
+    console.warn("[HugoAura / Topmost] Failed to install configuration bridge:", err);
+  }
+
   // 保存原始 stopScreensaver 引用, 供拦截后主动上报使用
   let originalStopScreensaver = null;
   // 防止多条屏保消息触发重复上报
