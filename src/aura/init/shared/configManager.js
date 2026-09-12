@@ -22,6 +22,120 @@ const CRYPTO_SETTINGS_AES = {
   hash: "sha256",
 };
 const LMAK_SETTINGS_BASE = "EncSettings\\LMAK";
+const LMAK_DPAPI_PREFIX = "dpapi:v2:";
+
+// CurrentUser DPAPI works in both main and renderer processes, including startup.
+// Send credentials over stdin, never interpolate them into command arguments.
+const getDpapiCommand = (protect) => {
+  if (process.platform !== "win32" || !process.env.SystemRoot) {
+    throw new Error("Windows DPAPI is required for credential storage");
+  }
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    "Add-Type -AssemblyName System.Security",
+    "$data = [Convert]::FromBase64String([Console]::In.ReadToEnd())",
+    `$result = [Security.Cryptography.ProtectedData]::${protect ? "Protect" : "Unprotect"}($data, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)`,
+    "[Console]::Out.Write([Convert]::ToBase64String($result))",
+  ].join("; ");
+  return {
+    file: path.join(
+      process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"
+    ),
+    args: ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
+  };
+};
+
+const parseDpapiOutput = (output) => {
+  const encoded = output.trim();
+  if (!encoded || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
+    throw new Error("Invalid DPAPI response");
+  }
+  return Buffer.from(encoded, "base64");
+};
+
+const runDpapiSync = (data, protect) => {
+  const { file, args } = getDpapiCommand(protect);
+  try {
+    return parseDpapiOutput(
+      childProc.execFileSync(file, args, {
+        input: data.toString("base64"),
+        encoding: "utf8",
+        windowsHide: true,
+        timeout: 15000,
+        maxBuffer: 1024 * 1024,
+        stdio: ["pipe", "pipe", "pipe"],
+      })
+    );
+  } catch {
+    throw new Error("DPAPI credential operation failed");
+  }
+};
+
+const runDpapi = (data, protect) => {
+  const { file, args } = getDpapiCommand(protect);
+  return new Promise((resolve, reject) => {
+    const child = childProc.execFile(
+      file, args,
+      { encoding: "utf8", windowsHide: true, timeout: 15000, maxBuffer: 1024 * 1024 },
+      (error, stdout) => {
+        if (error) return reject(new Error("DPAPI credential operation failed"));
+        try {
+          resolve(parseDpapiOutput(stdout));
+        } catch (err) {
+          reject(err);
+        }
+      }
+    );
+    child.stdin.on("error", () => {
+      reject(new Error("DPAPI credential input failed"));
+    });
+    child.stdin.end(data.toString("base64"));
+  });
+};
+
+const deriveLegacyLmakKey = (mac, salt) =>
+  crypto.scryptSync(mac, salt, CRYPTO_SETTINGS_AES.keyLength);
+
+const saveLegacyEncPassword = async (manager, password) => {
+  const randomSalt = crypto.randomBytes(CRYPTO_SETTINGS_AES.saltLength);
+  const macAddr = manager.priv_getMacAddr();
+  if (!macAddr) throw new Error("Mac is null or undefined");
+  const key = deriveLegacyLmakKey(macAddr, randomSalt);
+  const iv = crypto.randomBytes(CRYPTO_SETTINGS_AES.ivLength);
+  const cipherIns = crypto.createCipheriv(CRYPTO_SETTINGS_AES.mode, key, iv, {
+    // @ts-expect-error
+    authTagLength: CRYPTO_SETTINGS_AES.tagLength,
+  });
+  let encryptedPassword = cipherIns.update(password, "utf-8", "hex");
+  encryptedPassword += cipherIns.final("hex");
+  await registryManager.createOrUpdateRegKey(LMAK_SETTINGS_BASE, "LMAK_Value", encryptedPassword, true);
+  await registryManager.createOrUpdateRegKey(LMAK_SETTINGS_BASE, "LMAK_IV", iv.toString("hex"), true);
+  await registryManager.createOrUpdateRegKey(LMAK_SETTINGS_BASE, "LMAK_Salt", randomSalt.toString("hex"), true);
+  await registryManager.createOrUpdateRegKey(LMAK_SETTINGS_BASE, "LMAK_AuthTag", cipherIns.getAuthTag().toString("hex"), true);
+  return true;
+};
+
+const readLegacyMacSync = (manager) => {
+  try {
+    return (
+      registryManager.readRegKeySync(LMAK_SETTINGS_BASE, "LMAK_FakeMac", true)
+        ?.data || manager.priv_getMacAddr()
+    );
+  } catch {
+    return manager.priv_getMacAddr();
+  }
+};
+
+const readLegacyMac = async (manager) => {
+  try {
+    return (
+      (await registryManager.readRegKey(LMAK_SETTINGS_BASE, "LMAK_FakeMac", true))
+        .data || manager.priv_getMacAddr()
+    );
+  } catch {
+    return manager.priv_getMacAddr();
+  }
+};
 
 /**
  *
@@ -341,73 +455,30 @@ class ConfigManager {
    * @param {SHA256EncryptedPassword} password
    */
   async saveEncPassword(password) {
-    let macAddr = this.priv_getMacAddr();
-    let fallbackToStaticKey = false;
-
-    if (!macAddr) {
-      console.warn(
-        "[HugoAura / Config / LMK] No valid network inf found, fallback to static key."
-      );
-      macAddr = Buffer.from(crypto.randomBytes(6))
-        .toString("hex")
-        .toUpperCase();
+    if (process.platform !== "win32") {
+      return saveLegacyEncPassword(this, password);
     }
-
-    const randomSalt = crypto.randomBytes(CRYPTO_SETTINGS_AES.saltLength);
-    const key = crypto.scryptSync(macAddr, randomSalt, 32);
-    const iv = crypto.randomBytes(CRYPTO_SETTINGS_AES.ivLength);
-
-    const cipherIns = crypto.createCipheriv(CRYPTO_SETTINGS_AES.mode, key, iv, {
-      // @ts-expect-error
-      authTagLength: CRYPTO_SETTINGS_AES.tagLength,
-    });
-
-    let encryptedPassword = cipherIns.update(password, "utf-8", "hex");
-    encryptedPassword += cipherIns.final("hex");
-
-    const authTagHex = cipherIns.getAuthTag().toString("hex");
-    const ivHex = iv.toString("hex");
-    const saltHex = randomSalt.toString("hex");
-
-    await registryManager.createOrUpdateRegKey(
+    const encrypted = await runDpapi(Buffer.from(password, "utf8"), true);
+    const saved = await registryManager.createOrUpdateRegKey(
       LMAK_SETTINGS_BASE,
       "LMAK_Value",
-      encryptedPassword,
+      LMAK_DPAPI_PREFIX + encrypted.toString("base64"),
       true
     );
-    await registryManager.createOrUpdateRegKey(
-      LMAK_SETTINGS_BASE,
-      "LMAK_IV",
-      ivHex,
-      true
-    );
-    await registryManager.createOrUpdateRegKey(
-      LMAK_SETTINGS_BASE,
-      "LMAK_Salt",
-      saltHex,
-      true
-    );
-    await registryManager.createOrUpdateRegKey(
-      LMAK_SETTINGS_BASE,
-      "LMAK_AuthTag",
-      authTagHex,
-      true
-    );
-
-    if (fallbackToStaticKey) {
-      await registryManager.createOrUpdateRegKey(
-        LMAK_SETTINGS_BASE,
-        "LMAK_FakeMac",
-        macAddr,
-        true
-      );
-    }
-
+    if (!saved.success) throw new Error("Failed to persist protected credential");
     return true;
   }
 
   retrieveEncPassword() {
     try {
+      const encPasswdHex = registryManager.readRegKeySync(
+        LMAK_SETTINGS_BASE, "LMAK_Value", true
+      )?.data;
+      if (encPasswdHex?.startsWith(LMAK_DPAPI_PREFIX)) {
+        const encrypted = parseDpapiOutput(encPasswdHex.slice(LMAK_DPAPI_PREFIX.length));
+        const data = runDpapiSync(encrypted, false).toString("utf8");
+        return { success: true, data, error: null };
+      }
       const authTagHex = registryManager.readRegKeySync(
         LMAK_SETTINGS_BASE,
         "LMAK_AuthTag",
@@ -423,44 +494,6 @@ class ConfigManager {
         "LMAK_Salt",
         true
       )?.data;
-      const encPasswdHex = registryManager.readRegKeySync(
-        LMAK_SETTINGS_BASE,
-        "LMAK_Value",
-        true
-      )?.data;
-      let isStaticKey = false;
-      let macAddr = null;
-
-      try {
-        macAddr = registryManager.readRegKeySync(
-          LMAK_SETTINGS_BASE,
-          "LMAK_FakeMac",
-          true
-        )?.data;
-        if (!macAddr) {
-          isStaticKey = false;
-        } else {
-          isStaticKey = true;
-        }
-      } catch {
-        isStaticKey = false;
-      }
-
-      if (!isStaticKey) {
-        macAddr = this.priv_getMacAddr();
-
-        if (!macAddr) {
-          console.error(
-            "[HugoAura / Config / ERROR] Failed to retrieve password from reg: MAC Address invalid."
-          );
-          return {
-            success: false,
-            data: null,
-            error: new Error("Mac is null or undefined"),
-          };
-        }
-      }
-
       if (!saltHex || !ivHex || !authTagHex || !encPasswdHex) {
         console.error(
           "[HugoAura / Config / ERROR] Failed to retrieve password from reg: Reg keys invalid."
@@ -476,7 +509,9 @@ class ConfigManager {
       const authTag = Buffer.from(authTagHex, "hex");
       const encPasswd = Buffer.from(encPasswdHex, "utf-8").toString();
 
-      const key = crypto.scryptSync(macAddr, salt, 32);
+      const macAddr = readLegacyMacSync(this);
+      if (!macAddr) throw new Error("Mac is null or undefined");
+      const key = deriveLegacyLmakKey(macAddr, salt);
       const decipherIns = crypto.createDecipheriv(
         CRYPTO_SETTINGS_AES.mode,
         key,
@@ -493,6 +528,16 @@ class ConfigManager {
         decipherIns.update(encPasswd, "hex"),
         decipherIns.final(),
       ]).toString();
+
+      // Migrate legacy data to DPAPI only on Windows; retain it elsewhere.
+      if (process.platform === "win32") {
+        const encrypted = runDpapiSync(Buffer.from(result, "utf8"), true);
+        const saved = registryManager.createOrUpdateRegKeySync(
+          LMAK_SETTINGS_BASE, "LMAK_Value",
+          LMAK_DPAPI_PREFIX + encrypted.toString("base64"), true
+        );
+        if (!saved.success) throw new Error("Failed to migrate legacy credential");
+      }
 
       return {
         success: true,
@@ -514,6 +559,14 @@ class ConfigManager {
 
   async retrieveEncPasswordAsync() {
     try {
+      const encPasswdHex = (
+        await registryManager.readRegKey(LMAK_SETTINGS_BASE, "LMAK_Value", true)
+      ).data;
+      if (encPasswdHex?.startsWith(LMAK_DPAPI_PREFIX)) {
+        const encrypted = parseDpapiOutput(encPasswdHex.slice(LMAK_DPAPI_PREFIX.length));
+        const data = (await runDpapi(encrypted, false)).toString("utf8");
+        return { success: true, data, error: null };
+      }
       const authTagHex = (
         await registryManager.readRegKey(
           LMAK_SETTINGS_BASE,
@@ -527,44 +580,6 @@ class ConfigManager {
       const saltHex = (
         await registryManager.readRegKey(LMAK_SETTINGS_BASE, "LMAK_Salt", true)
       ).data;
-      const encPasswdHex = (
-        await registryManager.readRegKey(LMAK_SETTINGS_BASE, "LMAK_Value", true)
-      ).data;
-      let isStaticKey = false;
-      let macAddr = null;
-
-      try {
-        macAddr = (
-          await registryManager.readRegKey(
-            LMAK_SETTINGS_BASE,
-            "LMAK_FakeMac",
-            true
-          )
-        ).data;
-        if (!macAddr) {
-          isStaticKey = false;
-        } else {
-          isStaticKey = true;
-        }
-      } catch {
-        isStaticKey = false;
-      }
-
-      if (!isStaticKey) {
-        macAddr = this.priv_getMacAddr();
-
-        if (!macAddr) {
-          console.error(
-            "[HugoAura / Config / ERROR] Failed to retrieve password from reg: MAC Address invalid."
-          );
-          return {
-            success: false,
-            data: null,
-            error: new Error("Mac is null or undefined"),
-          };
-        }
-      }
-
       if (!saltHex || !ivHex || !authTagHex || !encPasswdHex) {
         console.error(
           "[HugoAura / Config / ERROR] Failed to retrieve password from reg: Reg keys invalid."
@@ -580,7 +595,9 @@ class ConfigManager {
       const authTag = Buffer.from(authTagHex, "hex");
       const encPasswd = Buffer.from(encPasswdHex, "utf-8").toString();
 
-      const key = crypto.scryptSync(macAddr, salt, 32);
+      const macAddr = await readLegacyMac(this);
+      if (!macAddr) throw new Error("Mac is null or undefined");
+      const key = deriveLegacyLmakKey(macAddr, salt);
       const decipherIns = crypto.createDecipheriv(
         CRYPTO_SETTINGS_AES.mode,
         key,
@@ -597,6 +614,8 @@ class ConfigManager {
         decipherIns.update(encPasswd, "hex"),
         decipherIns.final(),
       ]).toString();
+
+      await this.saveEncPassword(result);
 
       return {
         success: true,
