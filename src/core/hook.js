@@ -182,8 +182,10 @@ const launcher = ({ central, windowName, config }) => {
   // >>> Create WebSocket KeepAlive Window <<< //
   if (!global.__HUGO_AURA__.hookedWindows?.has("auraWsKeepAlive")) {
     const wsKaWin = plsUtils.createWsWindow(electron);
-    // @ts-expect-error
-    global.__HUGO_AURA__.hookedWindows.set("auraWsKeepAlive", wsKaWin);
+    if (wsKaWin) {
+      // @ts-expect-error
+      global.__HUGO_AURA__.hookedWindows.set("auraWsKeepAlive", wsKaWin);
+    }
   }
 
   // >>> Listeners <<< //

@@ -5,6 +5,9 @@
  */
 const createWsWindow = (electron) => {
   const path = require("path");
+  const fs = require("fs");
+  const aikariLauncher = path.join("C:\\Program Files", "HugoAura", "Aikari", "Aikari-Launcher.exe");
+  if (!fs.existsSync(aikariLauncher)) return null;
   const { BrowserWindow } = electron;
   const window = new BrowserWindow({
     width: 0,
