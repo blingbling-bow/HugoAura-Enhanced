@@ -1,22 +1,18 @@
-name: Pack source code & Create CI/CD Release
+name: Versioned Release
 
+# 推送 v* 格式的 tag 时触发, 构建正式版本 Release
 on:
-  # 任意分支每次 push 都触发一次自动构建 (tag 推送由 release.yml 处理)
   push:
-    branches:
-      - "**"
-  workflow_dispatch:
+    tags:
+      - "v*"
 
 permissions: write-all
 
 jobs:
-  pack:
-    name: Pack
+  release:
+    name: Release
 
     runs-on: ubuntu-latest
-
-    # tag 推送时跳过自动构建, 避免与正式 Release 重复
-    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
     steps:
       - name: Checkout repository code
@@ -24,7 +20,7 @@ jobs:
         with:
           path: "./HugoAura-Code"
 
-      - name: Create aura.zip
+      - name: Build artifacts
         run: |
           echo "[DEBUG] Creating artifacts directory"
           mkdir -p Artifacts
@@ -37,11 +33,13 @@ jobs:
           echo "[DEBUG] Files in <Working DIR>/Artifacts directory:"
           ls -la Artifacts/
 
-      - name: Get commit hash & build time
+      - name: Get tag & commit info
         run: |
           cd ./HugoAura-Code
+          TAG_NAME=${GITHUB_REF#refs/tags/}
           SHORT_HASH=$(git rev-parse --short=7 HEAD)
           FULL_HASH=$(git rev-parse HEAD)
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
           echo "SHORT_HASH=$SHORT_HASH" >> $GITHUB_ENV
           echo "FULL_HASH=$FULL_HASH" >> $GITHUB_ENV
           echo "BUILDTIME=$(TZ=Asia/Shanghai date)" >> $GITHUB_ENV
@@ -49,17 +47,20 @@ jobs:
       - name: Create release content
         run: |
           cat > rel_msg.txt << 'EOF'
-          ## 这是 HugoAura 的 CI 自动构建版本
+          ## HugoAura `${{ env.TAG_NAME }}` 正式发布
 
-          ### 版本类型: 🔁 自动构建版
-
-          ### 版本号: `vAutoBuild-${{ env.SHORT_HASH }}`
+          ### 版本类型: 📦 版本发布
 
           ### 对应 Commit: [`${{ env.SHORT_HASH }}`](https://github.com/${{ github.repository }}/commit/${{ env.FULL_HASH }})
 
           ---
 
-          ### ⚠ 注意: CI 自动构建版本可能不稳定 / 存在较多 Bug, 更新时请留意
+          ### 更新内容
+
+          - 修复 WS 指令拦截失效问题 (窥屏提醒 / 远程关机拦截 / 云端指令审计)
+          - 窥屏检测改为仅提醒模式 (实际采集由独立进程完成, 管家侧拦截无效)
+          - 修复 WS 保活窗口创建空引用问题
+          - 新增 DPAPI 加密存储支持, 重构密码管理逻辑
 
           #### 🕘 构建时间: ${{ env.BUILDTIME }}
           EOF
@@ -76,7 +77,14 @@ jobs:
           name: aura-core
           path: Artifacts/core.zip
 
-      - name: Upload release
+      - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create vAutoBuild-${{ env.SHORT_HASH }} "$GITHUB_WORKSPACE/Artifacts/aura.zip" "$GITHUB_WORKSPACE/Artifacts/core.zip" --title "[CI] HugoAura Auto Build Release (${{ env.SHORT_HASH }})" --notes-file "$GITHUB_WORKSPACE/rel_msg.txt" --repo ${{ github.repository }} --prerelease
+        run: |
+          gh release create "${{ env.TAG_NAME }}" \
+            "$GITHUB_WORKSPACE/Artifacts/aura.zip" \
+            "$GITHUB_WORKSPACE/Artifacts/core.zip" \
+            --title "HugoAura ${{ env.TAG_NAME }}" \
+            --notes-file "$GITHUB_WORKSPACE/rel_msg.txt" \
+            --repo ${{ github.repository }} \
+            --prerelease
