@@ -25,6 +25,28 @@ const banAuditSettings = [
             newVal;
         },
       },
+      {
+        index: 1,
+        id: "disableBuglyReport",
+        type: "switch",
+        name: "禁用 Bugly 崩溃上报",
+        description:
+          "关闭 Electron crashReporter 的崩溃转储自动上传 (sunday.cvte.com), 避免崩溃信息 (含注入侧异常) 上传至希沃服务端",
+        restart: true,
+        reload: false,
+        associateVal: null,
+        auraIf: () => true,
+        defaultValue: true,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.networkRewrite.disableBuglyReport
+            .enabled;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.networkRewrite.disableBuglyReport.enabled =
+            newVal;
+        },
+      },
     ],
   },
   {

@@ -1,5 +1,8 @@
 // @ts-check
 
+// 让管家自身日志保持明文 (官方预留开关, 写日志时实时检查, 注入后生效)
+process.env.DISABLE_LOG_ENCRYPTION = "1";
+
 if (!global.__HUGO_AURA__) {
   const __HUGO_AURA__ = {
     hookedWindows: new Map(),
@@ -161,6 +164,9 @@ const launcher = ({ central, windowName, config }) => {
     const powerOffInterceptor = require("../aura/mainProcess/hooks/powerOffInterceptor");
     powerOffInterceptor.hookFunc(central);
 
+    const disableBuglyReport = require("../aura/mainProcess/hooks/disableBuglyReport");
+    disableBuglyReport.hookFunc(central);
+
     global.__HUGO_AURA__.auraHooksInstalled = true;
   }
 
@@ -177,6 +183,29 @@ const launcher = ({ central, windowName, config }) => {
   // >>> Activate DevTools <<< //
   if (loadedConfig.devTools && !config.canOpenDevTool) {
     config.canOpenDevTool = true;
+  }
+
+  // 管家 4010+ 的快捷键模块在加载时就固化了 canOpenDevTool=false,
+  // 导致其 Ctrl+Shift+C 永远不会注册; 由 Aura 自行注册快捷键兜底
+  if (loadedConfig.devTools && !global.__HUGO_AURA__.devToolsShortcutRegistered) {
+    try {
+      const { globalShortcut } = electron;
+      const openAllDevTools = () => {
+        for (const win of electron.BrowserWindow.getAllWindows()) {
+          try {
+            win.webContents.openDevTools({ mode: "detach" });
+          } catch (err) {
+            console.warn("[HugoAura / Hook] Failed to open devtools for window:", err);
+          }
+        }
+      };
+      globalShortcut.register("CommandOrControl+Shift+C", openAllDevTools);
+      globalShortcut.register("F12", openAllDevTools);
+      global.__HUGO_AURA__.devToolsShortcutRegistered = true;
+      console.log("[HugoAura / Hook] DevTools shortcuts registered (Ctrl+Shift+C / F12)");
+    } catch (err) {
+      console.error("[HugoAura / Hook] Failed to register devtools shortcuts:", err);
+    }
   }
 
   // >>> Create WebSocket KeepAlive Window <<< //

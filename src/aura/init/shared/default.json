@@ -25,6 +25,9 @@
     "disableFriday": {
       "enabled": true
     },
+    "disableBuglyReport": {
+      "enabled": true
+    },
     "disableBehaviorAudit": {
       "enabled": true
     },
