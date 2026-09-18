@@ -529,7 +529,7 @@ const authSettings = [
         type: "switch",
         name: "启用窥屏提醒",
         description:
-          "当集控端发起远程查看屏幕 (直播) 时, 实时弹窗提醒。审计日志写入 logs/screenPeekAudit.log",
+          "当集控端发起远程查看屏幕 (直播) 时, 实时弹窗提醒。注意: 仅提醒, 无法阻止实际采集 (采集由独立进程完成)。审计日志写入 logs/screenPeekAudit.log",
         restart: false,
         reload: false,
         tip: true,
@@ -545,31 +545,6 @@ const authSettings = [
         callbackFn: (newVal) => {
           if (typeof newVal !== "boolean") return;
           global.__HUGO_AURA_CONFIG__.auraSettings.screenPeekDetector.enabled =
-            newVal;
-        },
-      },
-      {
-        index: 1,
-        id: "screenPeekMode",
-        type: "radio",
-        name: "拦截模式",
-        description: "仅提醒 (不阻止直播) / 直接阻止 (对方无法查看屏幕)",
-        restart: false,
-        reload: false,
-        associateVal: ["auraSettings.screenPeekDetector.enabled"],
-        auraIf: () => {
-          return global.__HUGO_AURA_CONFIG__.auraSettings.screenPeekDetector
-            .enabled;
-        },
-        defaultValue: "notify",
-        templates: ["notify", "block"],
-        templateLabels: ["仅提醒", "直接阻止"],
-        valueGetter: () => {
-          return global.__HUGO_AURA_CONFIG__.auraSettings.screenPeekDetector
-            .mode;
-        },
-        callbackFn: (newVal) => {
-          global.__HUGO_AURA_CONFIG__.auraSettings.screenPeekDetector.mode =
             newVal;
         },
       },

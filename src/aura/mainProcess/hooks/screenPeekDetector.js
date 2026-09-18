@@ -6,12 +6,15 @@
  * 原理: 希沃管家通过模块 399 (hugoServiceWebsocket) 的 WS 连接接收云端
  * /liveclient 指令, 分发到模块 401 启动/停止直播 (即远程屏幕查看)。
  * 本钩子通过共享蹦床 (installWsInterceptor) 在 WS 入口的 onMessage 处
- * 拦截, 在指令分发到执行模块前处理:
- *   1. 检测 messageType === "/liveclient" 的指令
+ * 监测该指令:
+ *   1. 检测 messageType === "/liveclient"
  *   2. state === true: 有人发起远程查看屏幕 → IPC 通知渲染层弹窗提醒
  *   3. state === false: 远程查看结束 → IPC 通知渲染层关闭提醒
- *   4. block 模式: 吞掉 state=true 指令, 阻止窥屏
- *   5. 审计日志: 记录窥屏事件到 logs/screenPeekAudit.log
+ *   4. 审计日志: 记录窥屏事件到 logs/screenPeekAudit.log
+ *
+ * 注意: 仅提醒, 不阻止。实际的屏幕采集由独立进程 (Zego 远程桌面组件)
+ * 完成, 指令不经过管家进程, 管家侧的 /liveclient 只是任务状态登记
+ * (模块 401 的 startTask 仅打日志), 拦截它无法阻止实际采集。
  *
  * 拦截机制说明: WS 基类 (模块 18) 的 create() 会把 onMessage 一次性解构
  * 进事件闭包, 事后包装实例属性无效 — 因此必须使用共享蹦床 + 断线重连
@@ -46,7 +49,6 @@ const hookFn = (central) => {
       config && config.auraSettings && config.auraSettings.screenPeekDetector;
     if (!cfg || !cfg.enabled) return null;
     return {
-      mode: cfg.mode === "block" ? "block" : "notify",
       logPeekEvents: cfg.logPeekEvents !== false,
     };
   };
@@ -126,7 +128,7 @@ const hookFn = (central) => {
     }
   };
 
-  // 拦截处理函数工厂: 按入口绑定渠道与来源标识
+  // 监测处理函数工厂: 按入口绑定渠道与来源标识
   const makeHandler = (label, getSource) => (parsed) => {
     const cfg = getDetectorConfig();
     if (!cfg) return false;
@@ -136,7 +138,6 @@ const hookFn = (central) => {
       const state = !!(parsed.data && parsed.data.state);
       const source = getSource();
       const ts = new Date().toISOString();
-      const blocked = cfg.mode === "block" && state;
 
       if (cfg.logPeekEvents) {
         const record = {
@@ -144,25 +145,23 @@ const hookFn = (central) => {
           source,
           channel: label,
           action: state ? "peek_start" : "peek_stop",
-          blocked,
           data: parsed.data || null,
+          _logType: "peek",
         };
         writeAudit(record);
         pushAuditEvent(record);
       }
 
-      notifyRenderer({ state, source, ts, blocked });
+      notifyRenderer({ state, source, ts });
 
       console.log(
         `[HugoAura / ScreenPeek] ${
           state ? "Peek STARTED" : "Peek stopped"
-        } from ${source}${blocked ? " (BLOCKED)" : ""}`
+        } from ${source}`
       );
-
-      // block 模式 + 窥屏开始: 吞掉指令, 不向下分发
-      if (blocked) return true;
     }
 
+    // 仅监测: 永远放行
     return false;
   };
 

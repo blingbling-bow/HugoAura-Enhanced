@@ -65,7 +65,6 @@
     },
     "screenPeekDetector": {
       "enabled": false,
-      "mode": "notify",
       "logPeekEvents": true
     },
     "powerOffIntercept": {
