@@ -46,24 +46,84 @@ jobs:
 
       - name: Create release content
         run: |
-          cat > rel_msg.txt << 'EOF'
-          ## HugoAura `${{ env.TAG_NAME }}` 正式发布
+          cd ./HugoAura-Code
 
-          ### 版本类型: 📦 版本发布
+          # 找上一个 tag (按创建时间排序, 排除当前 tag)
+          PREV_TAG=$(git tag --sort=-creatordate | grep -v "^${TAG_NAME}$" | head -n 1 || true)
 
-          ### 对应 Commit: [`${{ env.SHORT_HASH }}`](https://github.com/${{ github.repository }}/commit/${{ env.FULL_HASH }})
+          # 按 commit message 前缀分类生成更新日志
+          FEAT_LINES=""
+          FIX_LINES=""
+          CHORE_LINES=""
+          SEC_LINES=""
+          OTHER_LINES=""
+
+          while IFS= read -r subject; do
+            [ -z "$subject" ] && continue
+            case "$subject" in
+              Merge\ *) continue ;;
+              *\[✨\ *Feat\]*|*"\[⚡️ BREAKING / Feat]"*) FEAT_LINES="${FEAT_LINES}- ${subject}\n" ;;
+              *"\[🛠 Fix]"*|*"\[🛠️ Fix]"*) FIX_LINES="${FIX_LINES}- ${subject}\n" ;;
+              *"\[🔐 Security]"*) SEC_LINES="${SEC_LINES}- ${subject}\n" ;;
+              *"\[🔄 Chore]"*|*"\[Docs]"*|*"\[📚 Docs]"*) CHORE_LINES="${CHORE_LINES}- ${subject}\n" ;;
+              *) OTHER_LINES="${OTHER_LINES}- ${subject}\n" ;;
+            esac
+          done < <(git log --pretty=format:"%s" ${PREV_TAG:+"$PREV_TAG..HEAD"} 2>/dev/null)
+
+          cat > "$GITHUB_WORKSPACE/rel_msg.txt" << EOF
+          # HugoAura Enhanced 新版本已发布
+
+          **版本类型：⌛️ Release Candidate 版**
+
+          **版本号：** \`${TAG_NAME}\`
+
+          > [!注意]
+          > 如果您在最新版管家 (v1.6.7.4010) 上安装时遇到问题，请务必确认您使用的是否为 v0.0.3-beta-III 或更高版本的 HugoAura Enhanced 安装器。
+          >安装器下载链接:https://github.com/blingbling-bow/HugoAura-Install/releases
+
+          # 更新日志 / Changelog
+
+          **从 \`${PREV_TAG:-仓库初始}\` 之后**
+
+          ## ${TAG_NAME}
+
+          EOF
+
+          add_section() {
+            local title="$1" lines="$2"
+            if [ -n "$lines" ]; then
+              echo "" >> "$GITHUB_WORKSPACE/rel_msg.txt"
+              echo "### $title" >> "$GITHUB_WORKSPACE/rel_msg.txt"
+              echo "" >> "$GITHUB_WORKSPACE/rel_msg.txt"
+              echo -e "$lines" >> "$GITHUB_WORKSPACE/rel_msg.txt"
+            fi
+          }
+
+          add_section "✨ Feat / 新增" "$FEAT_LINES"
+          add_section "🛠 Fix / 修复" "$FIX_LINES"
+          add_section "🔐 Security / 安全" "$SEC_LINES"
+          add_section "🔄 Chore / 杂项 & Docs / 文档" "$CHORE_LINES"
+          add_section "📝 Other / 其他" "$OTHER_LINES"
+
+          cat >> "$GITHUB_WORKSPACE/rel_msg.txt" << EOF
+
+          # Version alignment / 版本对齐信息
+
+          **此 Release 发布时对齐的 Commit：** \`$SHORT_HASH\`
+
+          **此 Release 对齐的希沃管家版本：** \`v1.6.7.4010\`
+
+          **🕘 构建时间： $BUILDTIME**
 
           ---
 
-          ### 更新内容
+          **完整更新日志：** \`https://github.com/${{ github.repository }}/compare/${PREV_TAG:-""}...$TAG_NAME\`
 
-          - 修复 WS 指令拦截失效问题 (窥屏提醒 / 远程关机拦截 / 云端指令审计)
-          - 窥屏检测改为仅提醒模式 (实际采集由独立进程完成, 管家侧拦截无效)
-          - 修复 WS 保活窗口创建空引用问题
-          - 新增 DPAPI 加密存储支持, 重构密码管理逻辑
-
-          #### 🕘 构建时间: ${{ env.BUILDTIME }}
+          **如果您使用此版本发现了问题，请将此问题反馈至 Issues，并附上图片或复现步骤**
           EOF
+
+          echo "[DEBUG] Generated release notes:"
+          cat "$GITHUB_WORKSPACE/rel_msg.txt"
 
       - name: Upload aura.zip
         uses: actions/upload-artifact@v7
@@ -84,7 +144,7 @@ jobs:
           gh release create "${{ env.TAG_NAME }}" \
             "$GITHUB_WORKSPACE/Artifacts/aura.zip" \
             "$GITHUB_WORKSPACE/Artifacts/core.zip" \
-            --title "HugoAura ${{ env.TAG_NAME }}" \
+            --title "[Rel]${{ env.TAG_NAME }}" \
             --notes-file "$GITHUB_WORKSPACE/rel_msg.txt" \
             --repo ${{ github.repository }} \
-            --prerelease
+            --latest
