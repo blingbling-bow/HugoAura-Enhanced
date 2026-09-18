@@ -22,6 +22,7 @@ package-lock.json
 # OS Files
 desktop.ini
 .DS_Store
+.npm-cache
 
 # Editor Files
 .vscode/
@@ -32,6 +33,7 @@ desktop.ini
 *.bak
 .mimosa/
 Artifacts
+app_unpacked
 
 # Credentials
 *.git-credentials

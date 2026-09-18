@@ -3,29 +3,28 @@
 /**
  * 窥屏提醒 (Screen Peek Detector)
  *
- * 原理: 希沃管家通过模块 399/390 的 WS 连接接收云端 /liveclient 指令,
- * 分发到模块 401 启动/停止直播 (即远程屏幕查看)。
- * 本钩子在这两个 WS 入口的 onMessage 处包装:
+ * 原理: 希沃管家通过模块 399 (hugoServiceWebsocket) 的 WS 连接接收云端
+ * /liveclient 指令, 分发到模块 401 启动/停止直播 (即远程屏幕查看)。
+ * 本钩子通过共享蹦床 (installWsInterceptor) 在 WS 入口的 onMessage 处
+ * 拦截, 在指令分发到执行模块前处理:
  *   1. 检测 messageType === "/liveclient" 的指令
  *   2. state === true: 有人发起远程查看屏幕 → IPC 通知渲染层弹窗提醒
  *   3. state === false: 远程查看结束 → IPC 通知渲染层关闭提醒
  *   4. block 模式: 吞掉 state=true 指令, 阻止窥屏
  *   5. 审计日志: 记录窥屏事件到 logs/screenPeekAudit.log
  *
- * 链式兼容: 本钩子与 cloudUpdateInterceptor 可共存, onMessage 包装为
- * 后进先出链式调用, 互不干扰。
+ * 拦截机制说明: WS 基类 (模块 18) 的 create() 会把 onMessage 一次性解构
+ * 进事件闭包, 事后包装实例属性无效 — 因此必须使用共享蹦床 + 断线重连
+ * 激活 (详见 retryHook.js installWsInterceptor)。
  */
 
 const path = require("path");
 const fs = require("fs");
 
-const { withRetry, getPrototypeMethod, resolveModule } = require("./retryHook");
+const { withRetry, installWsInterceptor } = require("./retryHook");
 
 const hookFn = (central) => {
   const electron = central(1);
-
-  // 自检失败诊断日志: 每个模块只记录一次 (避免 30 次重试刷屏)
-  const diagLogged = {};
 
   const readConfig = () => {
     try {
@@ -127,108 +126,44 @@ const hookFn = (central) => {
     }
   };
 
-  const wrapWsClient = (moduleId, label, getSource) => {
-    try {
-      // 先取模块导出; 若 central 返回的是未执行工厂, resolveModule 会兜底执行
-      const client = resolveModule(central, moduleId);
+  // 拦截处理函数工厂: 按入口绑定渠道与来源标识
+  const makeHandler = (label, getSource) => (parsed) => {
+    const cfg = getDetectorConfig();
+    if (!cfg) return false;
 
-      // 运行时自检: 是否为 WS 客户端 (WebSocketManager 派生实例)
-      // 注意: onMessage 在构造器中被 bind, String(实例.onMessage) 恒为
-      // "[native code]", 必须取原型链上的未绑定方法做源码特征匹配;
-      // setHost/sendMessage 为基类方法, 用于确认 WS 客户端身份。
-      const unboundOnMessage = getPrototypeMethod(client, "onMessage");
-      const isWsClient =
-        client &&
-        typeof client.onMessage === "function" &&
-        typeof client.setHost === "function" &&
-        typeof client.sendMessage === "function" &&
-        typeof unboundOnMessage === "function" &&
-        String(unboundOnMessage).includes("JSON.parse");
+    // 检测 /liveclient 指令
+    if (parsed && parsed.messageType === "/liveclient") {
+      const state = !!(parsed.data && parsed.data.state);
+      const source = getSource();
+      const ts = new Date().toISOString();
+      const blocked = cfg.mode === "block" && state;
 
-      if (!isWsClient) {
-        if (!diagLogged[moduleId]) {
-          diagLogged[moduleId] = true;
-          const proto = Object.getPrototypeOf(client);
-          console.warn(
-            `[HugoAura / ScreenPeek] Module ${moduleId} self-check failed. ` +
-              `typeof(client)=${typeof client}, ` +
-              `onMessage=${client && typeof client.onMessage}, ` +
-              `setHost=${client && typeof client.setHost}, ` +
-              `sendMessage=${client && typeof client.sendMessage}, ` +
-              `proto.onMessage=${proto && typeof proto.onMessage}, ` +
-              `moduleTable=${!!(central.m && central.c)}`
-          );
-        }
-        console.debug(
-          `[HugoAura / ScreenPeek] Module ${moduleId} not ready, retrying...`
-        );
-        return false;
+      if (cfg.logPeekEvents) {
+        const record = {
+          ts,
+          source,
+          channel: label,
+          action: state ? "peek_start" : "peek_stop",
+          blocked,
+          data: parsed.data || null,
+        };
+        writeAudit(record);
+        pushAuditEvent(record);
       }
 
-      // 防止重试时重复包装 (onMessage 已存在我们的包裹标记)
-      if (client.__auraScreenPeekWrapped) return true;
-
-      const originalOnMessage = client.onMessage.bind(client);
-      client.onMessage = (rawMsg) => {
-        let parsed = null;
-        try {
-          parsed = JSON.parse(rawMsg);
-        } catch (err) {
-          return originalOnMessage(rawMsg);
-        }
-
-        const cfg = getDetectorConfig();
-        if (!cfg) return originalOnMessage(rawMsg);
-
-        // 检测 /liveclient 指令
-        if (parsed && parsed.messageType === "/liveclient") {
-          const state = !!(parsed.data && parsed.data.state);
-          const source = getSource();
-          const ts = new Date().toISOString();
-          const blocked = cfg.mode === "block" && state;
-
-          if (cfg.logPeekEvents) {
-            const record = {
-              ts,
-              source,
-              channel: label,
-              action: state ? "peek_start" : "peek_stop",
-              blocked,
-              data: parsed.data || null,
-            };
-            writeAudit(record);
-            pushAuditEvent(record);
-          }
-
-          notifyRenderer({ state, source, ts, blocked });
-
-          console.log(
-            `[HugoAura / ScreenPeek] ${
-              state ? "Peek STARTED" : "Peek stopped"
-            } from ${source}${blocked ? " (BLOCKED)" : ""}`
-          );
-
-          // block 模式 + 窥屏开始: 吞掉指令, 不向下分发
-          if (blocked) return;
-        }
-
-        return originalOnMessage(rawMsg);
-      };
-
-      // 标记已包装, 防止重试重复安装
-      client.__auraScreenPeekWrapped = true;
+      notifyRenderer({ state, source, ts, blocked });
 
       console.log(
-        `[HugoAura / ScreenPeek] Installed on ${label} (module ${moduleId}).`
+        `[HugoAura / ScreenPeek] ${
+          state ? "Peek STARTED" : "Peek stopped"
+        } from ${source}${blocked ? " (BLOCKED)" : ""}`
       );
-      return true;
-    } catch (err) {
-      console.error(
-        `[HugoAura / ScreenPeek] Failed to wrap ${label}:`,
-        err
-      );
-      return false;
+
+      // block 模式 + 窥屏开始: 吞掉指令, 不向下分发
+      if (blocked) return true;
     }
+
+    return false;
   };
 
   const getWsSource = (key) => {
@@ -241,18 +176,34 @@ const hookFn = (central) => {
     }
   };
 
+  // 入口: hugoServiceWebsocket WS (模块 399, /liveclient 实际入口)
   // 懒加载容错: 模块未就绪时延迟重试
   withRetry(
-    () => wrapWsClient(399, "hugoServiceWebsocket", () =>
-      getWsSource("hugoServiceWebsocket")
-    ),
+    () =>
+      installWsInterceptor(
+        central,
+        399,
+        "hugoServiceWebsocket",
+        makeHandler(
+          "hugoServiceWebsocket",
+          () => getWsSource("hugoServiceWebsocket")
+        )
+      ),
     { label: "ScreenPeek(399)" }
   )();
 
+  // 入口: proxyWebsocketHost WS (模块 390, 兜底覆盖)
   withRetry(
-    () => wrapWsClient(390, "proxyWebsocketHost", () =>
-      getWsSource("proxyWebsocketHost")
-    ),
+    () =>
+      installWsInterceptor(
+        central,
+        390,
+        "proxyWebsocketHost",
+        makeHandler(
+          "proxyWebsocketHost",
+          () => getWsSource("proxyWebsocketHost")
+        )
+      ),
     { label: "ScreenPeek(390)" }
   )();
 };

@@ -89,6 +89,157 @@ const resolveModule = (central, id) => {
   return mod;
 };
 
+// >>> WS 拦截器共享蹦床 (Trampoline) <<< //
+//
+// 关键背景: WS 基类 (模块 18) 的 create() 中:
+//   const { host, onLinkOk, onClose, onMessage: i } = this;
+//   a.on("message", t => { ...; i(t) });
+// 消息回调在"连接建立时"一次性解构固化进闭包。若 hook 在连接建立后才
+// 包装 client.onMessage 实例属性, 新包装永远不会被调用 (闭包仍持有旧引用),
+// 导致拦截/审计/提醒全部失效。
+//
+// 解决方案: 所有 WS hook 共享一个"蹦床"函数, 首次安装时替换实例 onMessage,
+// 后续 hook 只向蹦床的拦截器列表注册处理函数 (支持任意时刻注册, 天然解决
+// 多 hook 安装顺序问题)。若安装时连接已建立 (ws 已存在), 主动断开触发
+// 基类自动重连 (onClose → relinkFun → create()), 重连后的闭包捕获的就是蹦床。
+
+const WS_TRAMPOLINE_FLAG = "__auraWsTrampoline";
+const WS_INTERCEPTORS_FLAG = "__auraWsInterceptors";
+const WS_REFRESHED_FLAG = "__auraWsRefreshed";
+
+// 自检失败诊断: 每个 (模块, 入口) 只记录一次
+const wsDiagLogged = {};
+
+/**
+ * 向 WS 客户端安装共享拦截蹦床并注册处理函数。
+ *
+ * 处理函数签名: handler(parsed, rawMsg) => true | { delay: ms } | void
+ *   - 返回 true          : 消息已消费, 终止链条 (拦截/吞掉指令)
+ *   - 返回 { delay: ms } : 终止链条, 并在 ms 毫秒后放行原始消息
+ *   - 其他               : 继续传递给下一个处理函数 / 原始 onMessage
+ *
+ * @param {(id: number) => any} central 模块加载器
+ * @param {number} moduleId WS 客户端模块 ID
+ * @param {string} label 入口名称 (日志标识)
+ * @param {(parsed: any, rawMsg: string) => true | { delay: number } | void} handler
+ * @returns {boolean} true=安装成功 / false=模块未就绪需重试
+ */
+const installWsInterceptor = (central, moduleId, label, handler) => {
+  try {
+    const client = resolveModule(central, moduleId);
+
+    // 运行时自检: 是否为 WS 客户端 (WebSocketManager 派生实例)。
+    // onMessage 在基类构造器中被 bind, 必须取原型链上的未绑定方法做特征匹配;
+    // setHost/sendMessage 为基类方法, 用于确认 WS 客户端身份。
+    const unboundOnMessage = getPrototypeMethod(client, "onMessage");
+    const isWsClient =
+      client &&
+      typeof client.onMessage === "function" &&
+      typeof client.setHost === "function" &&
+      typeof client.sendMessage === "function" &&
+      typeof unboundOnMessage === "function" &&
+      String(unboundOnMessage).includes("JSON.parse");
+
+    if (!isWsClient) {
+      if (!wsDiagLogged[label]) {
+        wsDiagLogged[label] = true;
+        const proto = Object.getPrototypeOf(client);
+        console.warn(
+          `[HugoAura / WsHook] ${label} (module ${moduleId}) self-check failed. ` +
+            `typeof(client)=${typeof client}, ` +
+            `onMessage=${client && typeof client.onMessage}, ` +
+            `setHost=${client && typeof client.setHost}, ` +
+            `sendMessage=${client && typeof client.sendMessage}, ` +
+            `proto.onMessage=${proto && typeof proto.onMessage}, ` +
+            `moduleTable=${!!(central.m && central.c)}`
+        );
+      }
+      console.debug(
+        `[HugoAura / WsHook] ${label} (module ${moduleId}) not ready, retrying...`
+      );
+      return false;
+    }
+
+    // 首次安装: 建立共享蹦床
+    if (!client[WS_TRAMPOLINE_FLAG]) {
+      const originalOnMessage = client.onMessage.bind(client);
+      const interceptors = [];
+      client[WS_INTERCEPTORS_FLAG] = interceptors;
+
+      client.onMessage = (rawMsg) => {
+        let parsed = null;
+        try {
+          parsed = JSON.parse(rawMsg);
+        } catch (err) {
+          // 非 JSON 消息原样透传, 不拦截
+          return originalOnMessage(rawMsg);
+        }
+
+        for (const h of interceptors) {
+          let ret = undefined;
+          try {
+            ret = h(parsed, rawMsg);
+          } catch (err) {
+            console.error(
+              `[HugoAura / WsHook / ${label}] Interceptor error:`,
+              err
+            );
+          }
+          if (ret === true) return; // 已消费 (拦截)
+          if (ret && typeof ret === "object" && Number(ret.delay) > 0) {
+            const ms = Number(ret.delay);
+            setTimeout(() => {
+              try {
+                originalOnMessage(rawMsg);
+              } catch (err) {
+                console.error(
+                  `[HugoAura / WsHook / ${label}] Delayed dispatch error:`,
+                  err
+                );
+              }
+            }, ms);
+            return;
+          }
+        }
+        return originalOnMessage(rawMsg);
+      };
+
+      client[WS_TRAMPOLINE_FLAG] = true;
+    }
+
+    // 注册处理函数 (防重复注册, 重试场景)
+    const interceptors = client[WS_INTERCEPTORS_FLAG];
+    if (!interceptors.includes(handler)) interceptors.push(handler);
+
+    // 连接已建立: 主动断开触发基类重连, 使 create() 闭包捕获蹦床。
+    // 仅需执行一次 — 蹦床稳定存在, 后续注册的处理函数即时生效。
+    if (client.ws && !client[WS_REFRESHED_FLAG]) {
+      client[WS_REFRESHED_FLAG] = true;
+      try {
+        client.intervals = 0; // 重连不退避 (基类 relinkFun 会 +2000ms, 约 2s 重连)
+        console.log(
+          `[HugoAura / WsHook] Refreshing ${label} (module ${moduleId}) connection to activate interceptor...`
+        );
+        client.ws.close();
+      } catch (err) {
+        console.error(
+          `[HugoAura / WsHook] Failed to refresh ${label} connection:`,
+          err
+        );
+        client[WS_REFRESHED_FLAG] = false;
+      }
+    }
+
+    console.log(
+      `[HugoAura / WsHook] Interceptor installed on ${label} (module ${moduleId}).`
+    );
+    return true;
+  } catch (err) {
+    console.error(`[HugoAura / WsHook] Failed to install ${label}:`, err);
+    return false;
+  }
+};
+
 /**
  * @param {() => boolean} fn 安装函数, 返回 true=成功 / false=失败需重试
  * @param {RetryOptions} [options]
@@ -136,4 +287,9 @@ const withRetry = (fn, options = {}) => {
   return attempt;
 };
 
-module.exports = { withRetry, getPrototypeMethod, resolveModule };
+module.exports = {
+  withRetry,
+  getPrototypeMethod,
+  resolveModule,
+  installWsInterceptor,
+};

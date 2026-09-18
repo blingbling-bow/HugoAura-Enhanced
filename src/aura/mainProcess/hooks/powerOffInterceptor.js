@@ -3,30 +3,31 @@
 /**
  * 远程关机指令拦截 (Power-Off Interceptor)
  *
- * 原理: 希沃管家通过 WS 连接接收云端下发的关机/重启指令:
- *   /powerOff/confirm — 远程关机确认
+ * 原理: 希沃管家通过 WS 连接接收云端下发的关机指令:
+ *   模块 390 (proxyWebsocketHost) 的 onMessage → 分发到模块 128,
+ *   命中 e.url === "/powerOff/confirm" 后弹倒计时并执行关机。
  *
- * 本钩子在 WS 客户端 (模块 399/390) 的 onMessage 处包装,
- * 在指令分发到执行模块前拦截:
+ * 本钩子通过共享蹦床 (installWsInterceptor) 在模块 390/399 的 onMessage
+ * 入口处拦截, 在指令分发到执行模块前处理:
  *   1. block 模式: 直接吞掉关机指令, 设备不会被远程关机。
- *   2. notify 模式: 放行指令但弹窗提醒用户。
+ *   2. notify 模式: 延迟 10 秒放行指令, 弹窗提醒用户。
  *   3. 审计日志写入 cloudCommandAudit.log (复用云端指令审计通道)。
  *
- * 与 cloudUpdateInterceptor 共存: 各自独立包装 onMessage, 互不影响。
+ * 拦截机制说明: WS 基类 (模块 18) 的 create() 会把 onMessage 一次性解构
+ * 进事件闭包, 事后包装实例属性无效 — 因此必须使用共享蹦床 + 断线重连
+ * 激活 (详见 retryHook.js installWsInterceptor)。
  */
 
 const path = require("path");
 const fs = require("fs");
 
-const { withRetry, getPrototypeMethod, resolveModule } = require("./retryHook");
+const { withRetry, installWsInterceptor } = require("./retryHook");
 
 // 关机指令匹配规则
 const POWER_OFF_RULES = ["/powerOff/confirm"];
 
 const hookFn = (central) => {
   const electron = central(1);
-
-  const diagLogged = {};
 
   // 复用云端指令审计通道: 推送到渲染层指令审计页面
   const pushAuditEvent = (record) => {
@@ -129,98 +130,41 @@ const hookFn = (central) => {
     }
   };
 
-  const wrapWsClient = (moduleId, label, getSource) => {
-    try {
-      const client = resolveModule(central, moduleId);
+  // 拦截处理函数工厂: 按入口绑定渠道与来源标识
+  const makeHandler = (label, getSource) => (parsed) => {
+    const cfg = getInterceptConfig();
+    if (!cfg) return false;
 
-      const unboundOnMessage = getPrototypeMethod(client, "onMessage");
-      const isWsClient =
-        client &&
-        typeof client.onMessage === "function" &&
-        typeof client.setHost === "function" &&
-        typeof client.sendMessage === "function" &&
-        typeof unboundOnMessage === "function" &&
-        String(unboundOnMessage).includes("JSON.parse");
+    const url = parsed && parsed.url;
+    if (!isPowerOffUrl(url)) return false;
 
-      if (!isWsClient) {
-        if (!diagLogged[moduleId]) {
-          diagLogged[moduleId] = true;
-          console.warn(
-            `[HugoAura / PowerOff] Module ${moduleId} self-check failed.`
-          );
-        }
-        console.debug(
-          `[HugoAura / PowerOff] Module ${moduleId} not ready, retrying...`
-        );
-        return false;
-      }
+    const source = getSource();
+    const ts = new Date().toISOString();
+    const record = {
+      ts,
+      source,
+      channel: label,
+      url,
+      action: cfg.mode === "block" ? "blocked" : "captured",
+      data: parsed && parsed.data !== undefined ? parsed.data : null,
+      _logType: "powerOff",
+    };
+    writeAudit(record);
+    pushAuditEvent(record);
+    pushPowerOffNotify(record);
 
-      // 防止重复包装
-      if (client.__auraPowerOffWrapped) return true;
-
-      const originalOnMessage = client.onMessage.bind(client);
-      client.onMessage = (rawMsg) => {
-        let parsed = null;
-        try {
-          parsed = JSON.parse(rawMsg);
-        } catch (err) {
-          return originalOnMessage(rawMsg);
-        }
-
-        const cfg = getInterceptConfig();
-        if (!cfg) return originalOnMessage(rawMsg);
-
-        const url = parsed && parsed.url;
-        const source = getSource();
-        const ts = new Date().toISOString();
-
-        if (isPowerOffUrl(url)) {
-          const record = {
-            ts,
-            source,
-            channel: label,
-            url,
-            action: cfg.mode === "block" ? "blocked" : "captured",
-            data: parsed && parsed.data !== undefined ? parsed.data : null,
-            _logType: "powerOff",
-          };
-          writeAudit(record);
-          pushAuditEvent(record);
-          pushPowerOffNotify(record);
-
-          if (cfg.mode === "block") {
-            console.log(
-              `[HugoAura / PowerOff] Blocked remote power-off from ${source}`
-            );
-            return; // 吞掉指令, 设备不会被关机
-          }
-
-          // notify 模式: 延迟 10 秒后放行, 给用户保存工作的时间
-          console.log(
-            `[HugoAura / PowerOff] Remote power-off detected, delaying 10s before dispatch (notify mode)`
-          );
-          setTimeout(() => {
-            try {
-              originalOnMessage(rawMsg);
-            } catch (err) {
-              console.error("[HugoAura / PowerOff] Delayed dispatch error:", err);
-            }
-          }, 10000);
-          return; // 不立即放行, 等延迟结束后再分发
-        }
-
-        return originalOnMessage(rawMsg);
-      };
-
-      client.__auraPowerOffWrapped = true;
+    if (cfg.mode === "block") {
       console.log(
-        `[HugoAura / PowerOff] Installed on ${label} (module ${moduleId}).`
+        `[HugoAura / PowerOff] Blocked remote power-off from ${source}`
       );
-      return true;
-    } catch (err) {
-      console.error(`[HugoAura / PowerOff] Failed to wrap ${label}:`, err);
-      return false;
+      return true; // 吞掉指令, 设备不会被关机
     }
+
+    // notify 模式: 延迟 10 秒后放行, 给用户保存工作的时间
+    console.log(
+      `[HugoAura / PowerOff] Remote power-off detected, delaying 10s before dispatch (notify mode)`
+    );
+    return { delay: 10000 };
   };
 
   const getWsSource = (key) => {
@@ -233,17 +177,33 @@ const hookFn = (central) => {
     }
   };
 
+  // 入口 1: hugoServiceWebsocket WS (模块 399, 兜底覆盖)
   withRetry(
-    () => wrapWsClient(399, "hugoServiceWebsocket", () =>
-      getWsSource("hugoServiceWebsocket")
-    ),
+    () =>
+      installWsInterceptor(
+        central,
+        399,
+        "hugoServiceWebsocket",
+        makeHandler(
+          "hugoServiceWebsocket",
+          () => getWsSource("hugoServiceWebsocket")
+        )
+      ),
     { label: "PowerOff(399)" }
   )();
 
+  // 入口 2: proxyWebsocketHost WS (模块 390, /powerOff/confirm 实际入口)
   withRetry(
-    () => wrapWsClient(390, "proxyWebsocketHost", () =>
-      getWsSource("proxyWebsocketHost")
-    ),
+    () =>
+      installWsInterceptor(
+        central,
+        390,
+        "proxyWebsocketHost",
+        makeHandler(
+          "proxyWebsocketHost",
+          () => getWsSource("proxyWebsocketHost")
+        )
+      ),
     { label: "PowerOff(390)" }
   )();
 };
