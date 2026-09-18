@@ -163,6 +163,30 @@ const uxAndAppearanceSettings = [
           ].enabled = newVal;
         },
       },
+      {
+        index: 2,
+        id: "autoOpenUsb",
+        type: "switch",
+        name: "自动打开 U 盘",
+        description:
+          "启用后, 插入 U 盘时将自动使用资源管理器打开对应的驱动器",
+        restart: true,
+        reload: false,
+        associateVal: [],
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/autoOpenUsb"
+          ].enabled;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/autoOpenUsb"
+          ].enabled = newVal;
+        },
+      },
     ],
   },
   {

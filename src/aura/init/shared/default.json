@@ -47,6 +47,9 @@
     },
     "appearance/hideCountdown": {
       "enabled": false
+    },
+    "appearance/autoOpenUsb": {
+      "enabled": false
     }
   },
   "ssa": {

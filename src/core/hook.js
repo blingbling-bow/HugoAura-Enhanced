@@ -170,6 +170,9 @@ const launcher = ({ central, windowName, config }) => {
     const hideCountdown = require("../aura/mainProcess/hooks/hideCountdown");
     hideCountdown.hookFunc(central);
 
+    const autoOpenUsb = require("../aura/mainProcess/hooks/autoOpenUsb");
+    autoOpenUsb.hookFunc(central);
+
     global.__HUGO_AURA__.auraHooksInstalled = true;
   }
 
