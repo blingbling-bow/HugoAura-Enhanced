@@ -167,6 +167,9 @@ const launcher = ({ central, windowName, config }) => {
     const disableBuglyReport = require("../aura/mainProcess/hooks/disableBuglyReport");
     disableBuglyReport.hookFunc(central);
 
+    const hideCountdown = require("../aura/mainProcess/hooks/hideCountdown");
+    hideCountdown.hookFunc(central);
+
     global.__HUGO_AURA__.auraHooksInstalled = true;
   }
 

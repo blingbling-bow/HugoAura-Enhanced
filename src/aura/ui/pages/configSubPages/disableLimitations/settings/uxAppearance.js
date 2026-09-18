@@ -280,6 +280,30 @@ const uxAndAppearanceSettings = [
           return { valid: true };
         },
       },
+      {
+        index: 2,
+        id: "hideCountdown",
+        type: "switch",
+        name: "隐藏倒计时组件",
+        description:
+          "启用后, 集控下发的倒计时窗口将不再显示 (拦截消息并关闭已显示的窗口)",
+        restart: true,
+        reload: false,
+        associateVal: [],
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/hideCountdown"
+          ].enabled;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/hideCountdown"
+          ].enabled = newVal;
+        },
+      },
     ],
   },
 ];
