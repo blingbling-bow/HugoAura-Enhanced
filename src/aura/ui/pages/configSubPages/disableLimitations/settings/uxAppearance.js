@@ -328,6 +328,30 @@ const uxAndAppearanceSettings = [
           ].enabled = newVal;
         },
       },
+      {
+        index: 3,
+        id: "hideFastToolbar",
+        type: "switch",
+        name: "隐藏下课锁屏卡片",
+        description:
+          "启用后, 悬浮的下课锁屏卡片将不再显示 (锁屏页面本身不受影响)",
+        restart: true,
+        reload: false,
+        associateVal: [],
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/hideFastToolbar"
+          ].enabled;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/hideFastToolbar"
+          ].enabled = newVal;
+        },
+      },
     ],
   },
 ];

@@ -50,6 +50,9 @@
     },
     "appearance/autoOpenUsb": {
       "enabled": false
+    },
+    "appearance/hideFastToolbar": {
+      "enabled": false
     }
   },
   "ssa": {
