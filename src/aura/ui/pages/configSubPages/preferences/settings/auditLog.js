@@ -41,6 +41,12 @@ const actionMeta = (entry) => {
     if (entry.action === "captured")
       return { text: "关机提醒", cls: "warning" };
   }
+  if (entry._logType === "lockScreen") {
+    if (entry.action === "blocked")
+      return { text: "锁屏已阻止", cls: "danger" };
+    if (entry.action === "captured")
+      return { text: "锁屏提醒", cls: "warning" };
+  }
   if (entry.action === "blocked") return { text: "已拦截", cls: "danger" };
   if (entry.action === "captured") return { text: "已捕获", cls: "primary" };
   if (entry.action === "logged") return { text: "已记录", cls: "info" };
@@ -108,6 +114,11 @@ const renderStats = (filtered, all) => {
     {
       label: "关机拦截",
       value: count((e) => e._logType === "powerOff"),
+      cls: "danger",
+    },
+    {
+      label: "锁屏拦截",
+      value: count((e) => e._logType === "lockScreen"),
       cls: "danger",
     },
   ];

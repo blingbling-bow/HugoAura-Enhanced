@@ -609,6 +609,65 @@ const authSettings = [
       },
     ],
   },
+  {
+    id: 7,
+    categoryName: "远程锁屏",
+    child: [
+      {
+        index: 0,
+        id: "enableLockScreenIntercept",
+        type: "switch",
+        name: "拦截远程锁屏",
+        description:
+          "拦截集控下发的远程锁屏指令, 防止设备被远程锁屏。审计日志写入 logs/cloudCommandAudit.log",
+        restart: false,
+        reload: false,
+        tip: true,
+        tipTitle:
+          "拦截点: 模块 399/390 两条 WS 连接的 messageType 1211 锁屏指令 (screenLockStatus=1)。notify 模式放行但弹窗提醒, block 模式直接吞掉指令。本地锁屏按钮不受影响",
+        warning: true,
+        warningContent:
+          "启用后, 集控端将无法远程锁定你的设备屏幕。如果学校集控策略要求统一锁屏, 可能导致设备状态不一致",
+        associateVal: null,
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.auraSettings.lockScreenIntercept
+            .enabled;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.auraSettings.lockScreenIntercept.enabled =
+            newVal;
+        },
+      },
+      {
+        index: 1,
+        id: "lockScreenMode",
+        type: "radio",
+        name: "拦截模式",
+        description: "仅提醒 (放行但弹窗通知) / 直接阻止 (设备不会被锁屏)",
+        restart: false,
+        reload: false,
+        associateVal: ["auraSettings.lockScreenIntercept.enabled"],
+        auraIf: () => {
+          return global.__HUGO_AURA_CONFIG__.auraSettings.lockScreenIntercept
+            .enabled;
+        },
+        defaultValue: "block",
+        templates: ["notify", "block"],
+        templateLabels: ["仅提醒", "直接阻止"],
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.auraSettings.lockScreenIntercept
+            .mode;
+        },
+        callbackFn: (newVal) => {
+          global.__HUGO_AURA_CONFIG__.auraSettings.lockScreenIntercept.mode =
+            newVal;
+        },
+      },
+    ],
+  },
 ];
 
 module.exports = { authSettings };

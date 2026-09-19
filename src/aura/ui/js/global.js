@@ -126,7 +126,7 @@
     });
   })();
 
-  /* ===== 远程关机拦截提醒弹窗 ===== */
+  /* ===== 远程指令拦截提醒弹窗 (远程关机 / 远程锁屏) ===== */
   (() => {
     if (!global.ipcRenderer)
       global.ipcRenderer = require("electron").ipcRenderer;
@@ -148,8 +148,10 @@
     const showAlert = (data) => {
       hideAlert();
 
-      const { action, source, ts } = data;
+      const { action, source, ts, _logType } = data;
       const blocked = action === "blocked";
+      const isLock = _logType === "lockScreen";
+      const actionName = isLock ? "远程锁屏" : "远程关机";
       const time = new Date(ts).toLocaleTimeString("zh-CN");
       const color = blocked
         ? { bg: "#f8d7da", border: "#dc3545", text: "#721c24" }
@@ -175,8 +177,8 @@
 
       const title = document.createElement("p");
       title.textContent = blocked
-        ? "已阻止远程关机"
-        : "检测到远程关机, 10 秒后执行";
+        ? `已阻止${actionName}`
+        : `检测到${actionName}, 10 秒后执行`;
       title.style.cssText = `margin:0 0 2px;font-size:14px;font-weight:bold;color:${color.text};`;
 
       const meta = document.createElement("p");
@@ -207,6 +209,9 @@
     };
 
     ipcRenderer.on("$aura.powerOff.onBlocked", (_event, arg) => {
+      if (arg && arg.record) showAlert(arg.record);
+    });
+    ipcRenderer.on("$aura.lockScreen.onBlocked", (_event, arg) => {
       if (arg && arg.record) showAlert(arg.record);
     });
   })();

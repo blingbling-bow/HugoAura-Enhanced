@@ -164,6 +164,9 @@ const launcher = ({ central, windowName, config }) => {
     const powerOffInterceptor = require("../aura/mainProcess/hooks/powerOffInterceptor");
     powerOffInterceptor.hookFunc(central);
 
+    const lockScreenInterceptor = require("../aura/mainProcess/hooks/lockScreenInterceptor");
+    lockScreenInterceptor.hookFunc(central);
+
     const disableBuglyReport = require("../aura/mainProcess/hooks/disableBuglyReport");
     disableBuglyReport.hookFunc(central);
 
