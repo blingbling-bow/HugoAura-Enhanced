@@ -14,7 +14,7 @@ const banAuditSettings = [
         reload: false,
         associateVal: null,
         auraIf: () => true,
-        defaultValue: false,
+        defaultValue: true,
         valueGetter: () => {
           return global.__HUGO_AURA_CONFIG__.networkRewrite.disableFriday
             .enabled;

@@ -1,4 +1,5 @@
 const fs = require("fs");
+const path = require("path");
 
 // 简易解析 asar 头, 提取 main.js (只读, 不执行)
 function extractMain(asarPath, outPath) {
@@ -22,9 +23,16 @@ function extractMain(asarPath, outPath) {
   return true;
 }
 
-const ok = extractMain("app.asar.bak", "main_4008.js");
+// 输出统一落在仓库内已被 .gitignore 忽略的 .asar_extracted/ 下,
+// 避免在不同当前工作目录执行时到处留下未跟踪文件
+// (输入 app.asar.bak 仍按当前工作目录解析, 以便在 .bak 所在目录直接运行)
+const OUT_DIR = path.join(__dirname, "..", ".asar_extracted");
+const OUT_FILE = path.join(OUT_DIR, "main_4008.js");
+fs.mkdirSync(OUT_DIR, { recursive: true });
+
+const ok = extractMain("app.asar.bak", OUT_FILE);
 if (ok) {
-  const s = fs.readFileSync("main_4008.js", "utf8");
+  const s = fs.readFileSync(OUT_FILE, "utf8");
   let idx = 0;
   let found = 0;
   while ((idx = s.indexOf("openDevTools", idx)) !== -1 && found < 5) {

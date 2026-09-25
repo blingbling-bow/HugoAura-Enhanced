@@ -173,6 +173,7 @@ const launcher = ({ central, windowName, config }) => {
     installHook("PowerOffInterceptor", "../aura/mainProcess/hooks/powerOffInterceptor");
     installHook("LockScreenInterceptor", "../aura/mainProcess/hooks/lockScreenInterceptor");
     installHook("DisableBuglyReport", "../aura/mainProcess/hooks/disableBuglyReport");
+    installHook("BlockTelemetryUpload", "../aura/mainProcess/hooks/blockTelemetryUpload");
     installHook("HideCountdown", "../aura/mainProcess/hooks/hideCountdown");
     installHook("AutoOpenUsb", "../aura/mainProcess/hooks/autoOpenUsb");
 
