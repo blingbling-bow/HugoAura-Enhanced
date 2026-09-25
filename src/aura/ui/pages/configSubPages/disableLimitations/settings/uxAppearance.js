@@ -311,7 +311,7 @@ const uxAndAppearanceSettings = [
         name: "隐藏倒计日组件",
         description:
           '启用后, 集控下发的倒计日卡片 ("距离XX仅有N天") 不在屏上显示 (指令照常处理, 关闭开关后卡片即可恢复显示)',
-        restart: true,
+        restart: false,
         reload: false,
         associateVal: [],
         auraIf: () => true,
@@ -335,7 +335,7 @@ const uxAndAppearanceSettings = [
         name: "隐藏下课锁屏卡片",
         description:
           "启用后, 悬浮的下课锁屏卡片将不再显示 (锁屏页面本身不受影响)",
-        restart: true,
+        restart: false,
         reload: false,
         associateVal: [],
         auraIf: () => true,
@@ -349,6 +349,30 @@ const uxAndAppearanceSettings = [
           if (typeof newVal !== "boolean") return;
           global.__HUGO_AURA_CONFIG__.networkRewrite[
             "appearance/hideFastToolbar"
+          ].enabled = newVal;
+        },
+      },
+      {
+        index: 4,
+        id: "hideDesktopNotification",
+        type: "switch",
+        name: "隐藏常驻消息通知",
+        description:
+          "启用后, 悬浮于管家助手上方的桌面常驻消息通知卡片将不再显示",
+        restart: false,
+        reload: false,
+        associateVal: [],
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/hideDesktopNotification"
+          ].enabled;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/hideDesktopNotification"
           ].enabled = newVal;
         },
       },

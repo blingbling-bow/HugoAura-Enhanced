@@ -53,6 +53,9 @@
     },
     "appearance/hideFastToolbar": {
       "enabled": false
+    },
+    "appearance/hideDesktopNotification": {
+      "enabled": false
     }
   },
   "ssa": {
