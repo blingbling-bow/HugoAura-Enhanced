@@ -21,15 +21,22 @@ if (!global.__HUGO_AURA__) {
 }
 
 if (!global.__HUGO_AURA_API__) {
+  /**
+   * Aikari 更新源。
+   * 原有 API 域名自 2026-09 起已全部失效, 且暂无新的可用地址, 故暂时清空:
+   * 版本查询会立即返回"更新服务不可用", 不再逐个域名等待连接超时。
+   * 服务恢复后, 把可用域名填回 domains 即可复原更新能力。
+   *
+   * 原域名留档 (均已失效):
+   *   https://api-aura-projekts.delta.ooo
+   *   https://api-aura.asaka.site
+   *   https://api.hugoaura.dpdns.org
+   *   https://api-aura-projekts.minorice.moe
+   *   https://api.aura.vim.moe
+   */
   /** @type {import("../aura/types/shared/global").GlobalHugoAuraApiInfo} */
   const __HUGO_AURA_API__ = {
-    domains: [
-      "https://api-aura-projekts.delta.ooo",
-      "https://api-aura.asaka.site",
-      "https://api.hugoaura.dpdns.org",
-      "https://api-aura-projekts.minorice.moe",
-      "https://api.aura.vim.moe",
-    ],
+    domains: [],
     aikariUpdate: "/api/getAikariLatestVersion",
     auraUpdate: "/api/getAuraLatestVersion",
   };

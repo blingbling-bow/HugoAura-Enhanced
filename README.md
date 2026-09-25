@@ -101,4 +101,4 @@ Thanks goes to these wonderful people:
 
 ## ⚖ 许可证
 
-本项目基于 [GNU GPL-3.0](https://github.com/HugoAura/HugoAura/blob/master/LICENSE) 许可证开源。
+本项目基于 [GNU GPL-3.0](https://github.com/blingbling-bow/HugoAura-Enhanced/blob/dev/LICENSE) 许可证开源。

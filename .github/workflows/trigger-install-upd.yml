@@ -15,7 +15,7 @@ jobs:
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.AURA_INSTALL_REPO_PAT }}
-          repository: HugoAura/HugoAura-Install
+          repository: blingbling-bow/HugoAura-Enhanced-Install
           event-type: hugoaura_rel
           client-payload: |
             {

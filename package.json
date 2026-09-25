@@ -9,12 +9,12 @@
   "scripts": {},
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/HugoAura/Seewo-HugoAura.git"
+    "url": "git+ssh://git@github.com/blingbling-bow/HugoAura-Enhanced.git"
   },
   "author": "Minoricew",
   "license": "GPL-3.0-or-later",
   "bugs": {
-    "url": "https://github.com/HugoAura/Seewo-HugoAura/issues"
+    "url": "https://github.com/blingbling-bow/HugoAura-Enhanced/issues"
   },
-  "homepage": "https://github.com/HugoAura/Seewo-HugoAura"
+  "homepage": "https://github.com/blingbling-bow/HugoAura-Enhanced"
 }

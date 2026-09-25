@@ -6,7 +6,7 @@
  * 架构说明: HugoAura 不是独立程序, 而是注入到 SeewoServiceAssistant 的
  * app.asar (含 hook.js / zeron.js / preload.js) 与 resources/aura/ 目录。
  * 真正的"替换注入文件"涉及卸载 SeewoKeLiteLady 驱动、杀掉管家进程、
- * 从 app.asar.bak 重新 patch app.asar, 这些已由 HugoAura-Install 的
+ * 从 app.asar.bak 重新 patch app.asar, 这些已由 HugoAura-Enhanced-Install 的
  * AuraInstaller.exe 完成, 且 AuraInstaller.exe 是用户自行下载的便携程序,
  * 没有可信的固定落点。
  *
@@ -24,7 +24,7 @@ const nodeHttps = require("https");
 const { compareVersion } = require("../../../utils/auraVersion");
 const { validateUrl, validateUrlResolved } = require("../../../utils/urlSafety");
 
-// 与 HugoAura-Install 保持一致: 以 GitHub Releases 作为版本事实来源。
+// 与 HugoAura-Enhanced-Install 保持一致: 以 GitHub Releases 作为版本事实来源。
 const RELEASE_API_URL =
   "https://api.github.com/repos/blingbling-bow/HugoAura-Enhanced/releases";
 

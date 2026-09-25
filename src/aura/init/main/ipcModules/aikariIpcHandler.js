@@ -130,6 +130,21 @@ const functions = {
       // TODO: Channel selection
       const apiInfo = global.__HUGO_AURA_API__;
 
+      // 更新源已下线 (见 core/hook.js 中 domains 的说明): 直接明确失败,
+      // 不进入逐域名重试, 避免用户干等连接超时。
+      if (!apiInfo.domains || apiInfo.domains.length === 0) {
+        callbackFn({
+          id: "",
+          progress: 0,
+          status: "failed",
+          dlUrl: null,
+          savePath: null,
+          message:
+            "Aikari 更新服务暂不可用 (更新源已下线), 请稍后再试或自行前往 GitHub 下载安装包",
+        });
+        return false;
+      }
+
       const getVerPromise = new Promise(async (resolveGetVerReq) => {
         // ↓ 目前 channel param 没有什么用处
         for (const apiDomain of apiInfo.domains) {

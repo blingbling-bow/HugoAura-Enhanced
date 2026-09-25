@@ -11,7 +11,7 @@
  *
  * 检查更新: 调用主进程 $aura.update.check 查询 GitHub Releases 最新版本,
  * 有更新时提供 $aura.update.openRelease 打开官方发布页。实际替换文件由
- * HugoAura-Install 的 AuraInstaller.exe 完成, 不在本页执行。
+ * HugoAura-Enhanced-Install 的 AuraInstaller.exe 完成, 不在本页执行。
  */
 
 const UPDATE_IPC_BASE = "$aura.update";
