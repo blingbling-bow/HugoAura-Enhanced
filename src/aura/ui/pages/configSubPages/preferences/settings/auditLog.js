@@ -46,6 +46,12 @@ const actionMeta = (entry) => {
       return { text: "锁屏已阻止", cls: "danger" };
     if (entry.action === "captured")
       return { text: "锁屏提醒", cls: "warning" };
+    if (entry.action === "unlock")
+      return { text: "解锁已接管", cls: "info" };
+    if (entry.action === "passthrough_unlock")
+      return { text: "解锁已放行", cls: "secondary" };
+    if (entry.action === "passthrough")
+      return { text: "锁屏已放行", cls: "secondary" };
   }
   if (entry.action === "blocked") return { text: "已拦截", cls: "danger" };
   if (entry.action === "captured") return { text: "已捕获", cls: "primary" };
@@ -118,7 +124,11 @@ const renderStats = (filtered, all) => {
     },
     {
       label: "锁屏拦截",
-      value: count((e) => e._logType === "lockScreen"),
+      value: count(
+        (e) =>
+          e._logType === "lockScreen" &&
+          (e.action === "blocked" || e.action === "captured")
+      ),
       cls: "danger",
     },
   ];
@@ -312,6 +322,9 @@ const initAuditSubPage = () => {
           <option value="logged">全量记录</option>
           <option value="peek_start">窥屏开始</option>
           <option value="peek_stop">窥屏结束</option>
+          <option value="unlock">解锁已接管</option>
+          <option value="passthrough_unlock">解锁已放行</option>
+          <option value="passthrough">锁屏已放行</option>
         </select>
         <button id="auditRefreshBtn" type="button" class="btn btn-sm btn-outline-primary">
           刷新

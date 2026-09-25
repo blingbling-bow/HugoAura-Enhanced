@@ -25,10 +25,8 @@
  * 版本容错: 两个入口各自独立 try-catch + 自检, 失败仅跳过该入口。
  */
 
-const path = require("path");
-const fs = require("fs");
-
 const { withRetry, installWsInterceptor } = require("./retryHook");
+const auditWriter = require("./auditWriter");
 
 // 更新指令默认拦截规则 (url 关键字/前缀匹配)
 const DEFAULT_BLOCK_RULES = [
@@ -125,61 +123,30 @@ const hookFn = (central) => {
     return rules.some((rule) => url.includes(rule));
   };
 
-  // 审计日志: <auraDir>/logs/cloudCommandAudit.log (带轮转, 上限 5MB)
-  const AUDIT_MAX_SIZE = 5 * 1024 * 1024; // 5 MB
-  const auditFilePath = (() => {
-    try {
-      const auraDir = global.__HUGO_AURA__ && global.__HUGO_AURA__.auraDir;
-      if (!auraDir) return null;
-      const logDir = path.join(auraDir, "logs");
-      if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
-      return path.join(logDir, "cloudCommandAudit.log");
-    } catch (err) {
-      console.error("[HugoAura / CloudInterceptor / Audit / Error]", err);
-      return null;
-    }
-  })();
-
-  let auditStream = auditFilePath
-    ? fs.createWriteStream(auditFilePath, { flags: "a" })
-    : null;
-
-  const rotateAuditLog = () => {
-    try {
-      if (!auditFilePath || !auditStream) return;
-      auditStream.end();
-      const oldFile = auditFilePath + ".old";
-      if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
-      fs.renameSync(auditFilePath, oldFile);
-      auditStream = fs.createWriteStream(auditFilePath, { flags: "a" });
-      console.log("[HugoAura / CloudInterceptor / Audit] Log rotated.");
-    } catch (err) {
-      console.error("[HugoAura / CloudInterceptor / Audit / Rotate Error]", err);
-    }
-  };
+  // 审计日志: <auraDir>/logs/cloudCommandAudit.log
+  // 写入与轮转统一交给共享写入器 (cloudCommandAudit.log 同时被
+  // powerOffInterceptor / lockScreenInterceptor 写入, 各自持句柄会互相打架)
+  const AUDIT_FILE = "cloudCommandAudit.log";
 
   // 按天清理: 每次写入前惰性执行, 删除超过保留天数的历史记录
   let lastCleanupAt = 0;
   const cleanupExpiredAudit = (retentionDays) => {
     try {
-      if (!auditFilePath || !fs.existsSync(auditFilePath)) return;
       const now = Date.now();
       // 距离上次清理不足 1 小时则跳过, 避免频繁读盘
       if (now - lastCleanupAt < 3600 * 1000) return;
       lastCleanupAt = now;
 
-      const cutoff = now - retentionDays * 24 * 3600 * 1000;
-      const content = fs.readFileSync(auditFilePath, "utf8");
+      const content = auditWriter.readAudit(AUDIT_FILE);
       if (!content) return;
+      const cutoff = now - retentionDays * 24 * 3600 * 1000;
       const { kept, removed } = cleanExpiredEntries(content, cutoff);
       if (removed > 0) {
-        // 先关闭 append 流, 避免与 writeFileSync 重写文件冲突 (offset 失效)
-        if (auditStream) auditStream.end();
-        fs.writeFileSync(auditFilePath, kept.length ? kept.join("\n") + "\n" : "", "utf8");
-        auditStream = fs.createWriteStream(auditFilePath, { flags: "a" });
-        console.log(
-          `[HugoAura / CloudInterceptor / Audit] Cleaned ${removed} expired entries (>${retentionDays}d).`
-        );
+        if (auditWriter.rewriteAudit(AUDIT_FILE, kept.length ? kept.join("\n") + "\n" : "")) {
+          console.log(
+            `[HugoAura / CloudInterceptor / Audit] Cleaned ${removed} expired entries (>${retentionDays}d).`
+          );
+        }
       }
     } catch (err) {
       console.error("[HugoAura / CloudInterceptor / Audit / Cleanup Error]", err);
@@ -188,14 +155,8 @@ const hookFn = (central) => {
 
   const writeAudit = (record, retentionDays = 7) => {
     try {
-      if (!auditStream || !auditFilePath) return;
       cleanupExpiredAudit(retentionDays);
-      // 轮转检查: 超过上限时滚动
-      try {
-        const stats = fs.statSync(auditFilePath);
-        if (stats.size > AUDIT_MAX_SIZE) rotateAuditLog();
-      } catch {}
-      auditStream.write(JSON.stringify(record) + "\n");
+      auditWriter.writeAudit(AUDIT_FILE, record);
     } catch (err) {
       console.error("[HugoAura / CloudInterceptor / Audit / Write Error]", err);
     }

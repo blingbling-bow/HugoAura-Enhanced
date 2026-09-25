@@ -149,32 +149,25 @@ const launcher = ({ central, windowName, config }) => {
 
   // >>> Init Aura Hooks (guarded: 仅安装一次, 防止多窗口重入) <<< //
   if (!global.__HUGO_AURA__.auraHooksInstalled) {
-    const disableScreensaverHook = require("../aura/mainProcess/hooks/disableScreensaver");
-    disableScreensaverHook.hookFunc(central);
+    // 逐个隔离安装: 任一钩子(含模块加载)抛错都只跳过它自己,
+    // 不能连带中断后面的钩子 (否则会出现"某个功能静默失效"且无迹可循)。
+    const installHook = (name, modulePath) => {
+      try {
+        require(modulePath).hookFunc(central);
+      } catch (err) {
+        console.error(`[HugoAura / Hooks] Failed to install ${name} hook:`, err);
+      }
+    };
 
-    const disableUpdateHook = require("../aura/mainProcess/hooks/disableUpdate");
-    disableUpdateHook.hookFunc(central);
-
-    const cloudUpdateInterceptor = require("../aura/mainProcess/hooks/cloudUpdateInterceptor");
-    cloudUpdateInterceptor.hookFunc(central);
-
-    const screenPeekDetector = require("../aura/mainProcess/hooks/screenPeekDetector");
-    screenPeekDetector.hookFunc(central);
-
-    const powerOffInterceptor = require("../aura/mainProcess/hooks/powerOffInterceptor");
-    powerOffInterceptor.hookFunc(central);
-
-    const lockScreenInterceptor = require("../aura/mainProcess/hooks/lockScreenInterceptor");
-    lockScreenInterceptor.hookFunc(central);
-
-    const disableBuglyReport = require("../aura/mainProcess/hooks/disableBuglyReport");
-    disableBuglyReport.hookFunc(central);
-
-    const hideCountdown = require("../aura/mainProcess/hooks/hideCountdown");
-    hideCountdown.hookFunc(central);
-
-    const autoOpenUsb = require("../aura/mainProcess/hooks/autoOpenUsb");
-    autoOpenUsb.hookFunc(central);
+    installHook("DisableScreensaver", "../aura/mainProcess/hooks/disableScreensaver");
+    installHook("DisableUpdate", "../aura/mainProcess/hooks/disableUpdate");
+    installHook("CloudUpdateInterceptor", "../aura/mainProcess/hooks/cloudUpdateInterceptor");
+    installHook("ScreenPeekDetector", "../aura/mainProcess/hooks/screenPeekDetector");
+    installHook("PowerOffInterceptor", "../aura/mainProcess/hooks/powerOffInterceptor");
+    installHook("LockScreenInterceptor", "../aura/mainProcess/hooks/lockScreenInterceptor");
+    installHook("DisableBuglyReport", "../aura/mainProcess/hooks/disableBuglyReport");
+    installHook("HideCountdown", "../aura/mainProcess/hooks/hideCountdown");
+    installHook("AutoOpenUsb", "../aura/mainProcess/hooks/autoOpenUsb");
 
     global.__HUGO_AURA__.auraHooksInstalled = true;
   }

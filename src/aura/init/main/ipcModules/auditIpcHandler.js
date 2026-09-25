@@ -97,8 +97,13 @@ const applyAuditIpcHandler = (ipcMain) => {
         success: true,
         error: null,
         data: {
-          cloud: cloudEntries.map((e) => ({ ...e, _logType: "cloud" })),
-          peek: peekEntries.map((e) => ({ ...e, _logType: "peek" })),
+          // 保留记录自带的 _logType (lockScreen / powerOff / peek / cloud),
+          // 仅在缺失时兜底 —— 覆写会让渲染端的锁屏 / 关机徽标与统计全部失效
+          cloud: cloudEntries.map((e) => ({
+            ...e,
+            _logType: e._logType || "cloud",
+          })),
+          peek: peekEntries.map((e) => ({ ...e, _logType: e._logType || "peek" })),
         },
       };
     }

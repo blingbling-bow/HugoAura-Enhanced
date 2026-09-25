@@ -308,9 +308,9 @@ const uxAndAppearanceSettings = [
         index: 2,
         id: "hideCountdown",
         type: "switch",
-        name: "隐藏倒计时组件",
+        name: "隐藏倒计日组件",
         description:
-          "启用后, 集控下发的倒计时窗口将不再显示 (拦截消息并关闭已显示的窗口)",
+          '启用后, 集控下发的倒计日卡片 ("距离XX仅有N天") 不在屏上显示 (指令照常处理, 关闭开关后卡片即可恢复显示)',
         restart: true,
         reload: false,
         associateVal: [],

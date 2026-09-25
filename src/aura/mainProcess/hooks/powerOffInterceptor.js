@@ -18,10 +18,8 @@
  * 激活 (详见 retryHook.js installWsInterceptor)。
  */
 
-const path = require("path");
-const fs = require("fs");
-
 const { withRetry, installWsInterceptor } = require("./retryHook");
+const auditWriter = require("./auditWriter");
 
 // 关机指令匹配规则
 const POWER_OFF_RULES = ["/powerOff/confirm"];
@@ -85,49 +83,11 @@ const hookFn = (central) => {
     return POWER_OFF_RULES.some((rule) => url.includes(rule));
   };
 
-  // 审计日志: 复用 cloudCommandAudit.log
-  const AUDIT_MAX_SIZE = 5 * 1024 * 1024;
-  const auditFilePath = (() => {
-    try {
-      const auraDir = global.__HUGO_AURA__ && global.__HUGO_AURA__.auraDir;
-      if (!auraDir) return null;
-      const logDir = path.join(auraDir, "logs");
-      if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
-      return path.join(logDir, "cloudCommandAudit.log");
-    } catch (err) {
-      console.error("[HugoAura / PowerOff / Audit / Error]", err);
-      return null;
-    }
-  })();
-
-  let auditStream = auditFilePath
-    ? fs.createWriteStream(auditFilePath, { flags: "a" })
-    : null;
-
-  const rotateAuditLog = () => {
-    try {
-      if (!auditFilePath || !auditStream) return;
-      auditStream.end();
-      const oldFile = auditFilePath + ".old";
-      if (fs.existsSync(oldFile)) fs.unlinkSync(oldFile);
-      fs.renameSync(auditFilePath, oldFile);
-      auditStream = fs.createWriteStream(auditFilePath, { flags: "a" });
-    } catch (err) {
-      console.error("[HugoAura / PowerOff / Audit / Rotate Error]", err);
-    }
-  };
-
+  // 审计日志: 复用 cloudCommandAudit.log (写入与轮转统一交给共享写入器,
+  // 避免与 cloudUpdateInterceptor / lockScreenInterceptor 的句柄互相打架)
+  const AUDIT_FILE = "cloudCommandAudit.log";
   const writeAudit = (record) => {
-    try {
-      if (!auditStream || !auditFilePath) return;
-      try {
-        const stats = fs.statSync(auditFilePath);
-        if (stats.size > AUDIT_MAX_SIZE) rotateAuditLog();
-      } catch {}
-      auditStream.write(JSON.stringify(record) + "\n");
-    } catch (err) {
-      console.error("[HugoAura / PowerOff / Audit / Write Error]", err);
-    }
+    auditWriter.writeAudit(AUDIT_FILE, record);
   };
 
   // 拦截处理函数工厂: 按入口绑定渠道与来源标识

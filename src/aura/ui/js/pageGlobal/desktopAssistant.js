@@ -37,13 +37,11 @@
           "[HugoAura / UI / Assistant] Unable to find the minimize button"
         );
       }
-    } else if (global.__HUGO_AURA_CONFIG__.ssa.ux.easiAssistant.notDisplay) {
-      const rootEl = document.getElementById("root");
-      if (rootEl) {
-        // @ts-expect-error
-        rootEl.style["display"] = "none";
-      }
     }
+    // "隐藏管家助手" (easiAssistant.notDisplay) 由主进程窗口钩子负责:
+    // 隐藏窗口 + 释放槽位 (mainProcess/hooks/hideDesktopAssistant.js)。
+    // 这里不能再把 #root 设为 display:none —— 该内联样式只在页面加载时设置一次,
+    // 开关关闭后不会复位, 会让恢复显示的卡片窗口变成一张空白卡片。
   };
 
   const onMounted = () => {

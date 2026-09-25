@@ -21,11 +21,25 @@ class NetworkHook {
         let rule = this.ruleCache.get(rulePath);
 
         if (!rule) {
-          rule = require(path.join(
+          const ruleFile = path.join(
             __dirname,
             "../../../aura/jsRewrite/network",
             rulePath
-          ));
+          );
+
+          // networkRewrite 下混有"仅作为主进程钩子配置开关"的条目
+          // (appearance/hideCountdown、appearance/autoOpenUsb、
+          // appearance/hideFastToolbar、disableBuglyReport), 它们没有
+          // 对应的 jsRewrite 模块, 由 mainProcess/hooks 各自读 config 生效。
+          // 这里静默跳过, 否则每个窗口启动都会刷 4 行 ERROR 误导排错。
+          if (!fs.existsSync(ruleFile) && !fs.existsSync(`${ruleFile}.js`)) {
+            console.debug(
+              `[HugoAura / NetworkHook] No rewrite module for config key: ${rulePath} (main-process-only switch, skipped)`
+            );
+            return;
+          }
+
+          rule = require(ruleFile);
           this.ruleCache.set(rulePath, rule);
         }
 

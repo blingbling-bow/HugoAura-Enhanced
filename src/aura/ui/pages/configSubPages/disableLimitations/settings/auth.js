@@ -624,10 +624,10 @@ const authSettings = [
         reload: false,
         tip: true,
         tipTitle:
-          "拦截点: 模块 399/390 两条 WS 连接的 messageType 1211 锁屏指令 (screenLockStatus=1)。notify 模式放行但弹窗提醒, block 模式直接吞掉指令。本地锁屏按钮不受影响",
+          "拦截点: 锁屏任务控制器 (模块 33) 的 messageType 1211 锁屏指令 (screenLockStatus=1)。notify 模式放行但弹窗提醒, block 模式吞掉指令并伪造锁屏回执 (集控端仍显示已锁屏)。本地锁屏按钮不受影响",
         warning: true,
         warningContent:
-          "启用后, 集控端将无法远程锁定你的设备屏幕。如果学校集控策略要求统一锁屏, 可能导致设备状态不一致",
+          "启用后, 集控端下发的锁屏不会真正锁住设备 (集控端仍显示已锁屏), 设备本地锁屏按钮不受影响",
         associateVal: null,
         auraIf: () => true,
         defaultValue: false,
