@@ -59,6 +59,9 @@
     },
     "appearance/hideDeviceLinkNotify": {
       "enabled": false
+    },
+    "appearance/keepPasswordUnlock": {
+      "enabled": false
     }
   },
   "ssa": {

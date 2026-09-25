@@ -177,6 +177,7 @@ const launcher = ({ central, windowName, config }) => {
     installHook("HideCountdown", "../aura/mainProcess/hooks/hideCountdown");
     installHook("DeviceLinkNotify", "../aura/mainProcess/hooks/deviceLinkNotify");
     installHook("AutoOpenUsb", "../aura/mainProcess/hooks/autoOpenUsb");
+    installHook("KeepPasswordUnlock", "../aura/mainProcess/hooks/keepPasswordUnlock");
 
     global.__HUGO_AURA__.auraHooksInstalled = true;
   }
