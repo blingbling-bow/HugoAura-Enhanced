@@ -376,6 +376,30 @@ const uxAndAppearanceSettings = [
           ].enabled = newVal;
         },
       },
+      {
+        index: 5,
+        id: "hideDeviceLinkNotify",
+        type: "switch",
+        name: "隐藏周边设备连接提示",
+        description:
+          "启用后, 物联设备接入 / 断开时右下角的提示卡片不再弹出 (智能笔配对失败、麦克风电量不足等告警不受影响)",
+        restart: false,
+        reload: false,
+        associateVal: [],
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/hideDeviceLinkNotify"
+          ].enabled;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/hideDeviceLinkNotify"
+          ].enabled = newVal;
+        },
+      },
     ],
   },
 ];

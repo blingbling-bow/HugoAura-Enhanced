@@ -175,6 +175,7 @@ const launcher = ({ central, windowName, config }) => {
     installHook("DisableBuglyReport", "../aura/mainProcess/hooks/disableBuglyReport");
     installHook("BlockTelemetryUpload", "../aura/mainProcess/hooks/blockTelemetryUpload");
     installHook("HideCountdown", "../aura/mainProcess/hooks/hideCountdown");
+    installHook("DeviceLinkNotify", "../aura/mainProcess/hooks/deviceLinkNotify");
     installHook("AutoOpenUsb", "../aura/mainProcess/hooks/autoOpenUsb");
 
     global.__HUGO_AURA__.auraHooksInstalled = true;
