@@ -24,8 +24,21 @@ const state = {
   listenerInstalled: false,
 };
 
+// 解锁方式中文名 (unlockAudit 记录的 method 字段)
+const UNLOCK_METHOD_LABELS = {
+  remote: "远程解锁",
+  activationCode: "激活码解锁",
+  password: "密码解锁",
+};
+
 // 动作徽标样式
 const actionMeta = (entry) => {
+  if (entry._logType === "unlock") {
+    return {
+      text: UNLOCK_METHOD_LABELS[entry.method] || "未知解锁",
+      cls: entry.method === "unknown" ? "secondary" : "info",
+    };
+  }
   if (entry._logType === "peek") {
     if (entry.action === "peek_start") {
       return entry.blocked
@@ -131,6 +144,11 @@ const renderStats = (filtered, all) => {
       ),
       cls: "danger",
     },
+    {
+      label: "解锁记录",
+      value: count((e) => e._logType === "unlock"),
+      cls: "info",
+    },
   ];
 
   const container = document.getElementById("auditStatsContainer");
@@ -165,9 +183,15 @@ const renderTable = (filtered) => {
       const meta = actionMeta(entry);
       const urlText = entry.url || (entry._logType === "peek" ? "/liveclient" : "-");
       const dataStr =
-        entry.data != null
-          ? JSON.stringify(entry.data).replace(/"/g, "&quot;").slice(0, 200)
-          : "";
+        entry._logType === "unlock"
+          ? `hadLock: ${entry.hadLock === true} / actionOperator: ${
+              entry.actionOperator === null || entry.actionOperator === undefined
+                ? "-"
+                : entry.actionOperator
+            }`
+          : entry.data != null
+            ? JSON.stringify(entry.data).replace(/"/g, "&quot;").slice(0, 200)
+            : "";
       return `
       <tr>
         <td class="aura-audit-cell-time">${formatTime(entry.ts)}</td>
@@ -322,7 +346,7 @@ const initAuditSubPage = () => {
           <option value="logged">全量记录</option>
           <option value="peek_start">窥屏开始</option>
           <option value="peek_stop">窥屏结束</option>
-          <option value="unlock">解锁已接管</option>
+          <option value="unlock">解锁事件</option>
           <option value="passthrough_unlock">解锁已放行</option>
           <option value="passthrough">锁屏已放行</option>
         </select>

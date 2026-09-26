@@ -178,6 +178,7 @@ const launcher = ({ central, windowName, config }) => {
     installHook("DeviceLinkNotify", "../aura/mainProcess/hooks/deviceLinkNotify");
     installHook("AutoOpenUsb", "../aura/mainProcess/hooks/autoOpenUsb");
     installHook("KeepPasswordUnlock", "../aura/mainProcess/hooks/keepPasswordUnlock");
+    installHook("UnlockAudit", "../aura/mainProcess/hooks/unlockAudit");
 
     global.__HUGO_AURA__.auraHooksInstalled = true;
   }

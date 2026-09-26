@@ -918,6 +918,10 @@ const newFunction = function (e, t, n) {
           (o.checkPasswordCorrect = function () {
             // ### BOR ### //
             const originalAuthFailed = () => {
+              if (__config.enabled && __config.noActivationCodeReset) {
+                o.passwordCheckFail();
+                return;
+              }
               o.failCount++,
                 o.passwordCheckFail(),
                 5 <= o.failCount &&

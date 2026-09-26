@@ -16,6 +16,7 @@
       "clickBtnToExit": true,
       "disableKeyboardHook": false,
       "authRewriteType": "customActivationCode",
+      "noActivationCodeReset": false,
       "customActivationCode": {
         "activationCodeWithSalt": "cbbd87c419b1c2dbc412ae238f1f4be3"
       }
@@ -99,6 +100,9 @@
     "cloudCommandAudit": {
       "enabled": false,
       "retentionDays": 7
+    },
+    "unlockAudit": {
+      "enabled": false
     },
     "appearance": {
       "appBar": {
