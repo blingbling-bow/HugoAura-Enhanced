@@ -48,8 +48,16 @@ jobs:
         run: |
           cd ./HugoAura-Code
 
+          # 版本类型由 tag 决定: 带 rc / beta / alpha / pre 视为预发布, 否则为正式版
+          case "${TAG_NAME}" in
+            *-rc*|*-beta*|*-alpha*|*-pre*) RELEASE_TYPE="🧪 预发布版 (Pre-release)" ;;
+            *) RELEASE_TYPE="✅ 正式版 (Stable Release)" ;;
+          esac
+
           # 找上一个 tag (按创建时间排序, 排除当前 tag)
-          PREV_TAG=$(git tag --sort=-creatordate | grep -v "^${TAG_NAME}$" | head -n 1 || true)
+          # 必须排除 pack.yml 产生的 vAutoBuild-<hash>: 它们数量远超正式版本 tag,
+          # 若不过滤, 这里会选中最近一次 CI 构建, 导致更新日志只剩几条甚至为空。
+          PREV_TAG=$(git tag --sort=-creatordate | grep -v "^${TAG_NAME}$" | grep -v "^vAutoBuild" | head -n 1 || true)
 
           # 按 commit message 前缀分类生成更新日志
           FEAT_LINES=""
@@ -60,20 +68,28 @@ jobs:
 
           while IFS= read -r subject; do
             [ -z "$subject" ] && continue
-            case "$subject" in
-              Merge\ *) continue ;;
-              *\[✨\ *Feat\]*|*"\[⚡️ BREAKING / Feat]"*) FEAT_LINES="${FEAT_LINES}- ${subject}\n" ;;
-              *"\[🛠 Fix]"*|*"\[🛠️ Fix]"*) FIX_LINES="${FIX_LINES}- ${subject}\n" ;;
-              *"\[🔐 Security]"*) SEC_LINES="${SEC_LINES}- ${subject}\n" ;;
-              *"\[🔄 Chore]"*|*"\[Docs]"*|*"\[📚 Docs]"*) CHORE_LINES="${CHORE_LINES}- ${subject}\n" ;;
-              *) OTHER_LINES="${OTHER_LINES}- ${subject}\n" ;;
-            esac
+            case "$subject" in Merge\ *) continue ;; esac
+
+            # 只取行首 [..] 前缀做类型判定; 各类型独立判断而非 case 单次匹配,
+            # 因此组合类型 (如 [🛠️ Fix / 🔄 Chore]) 会同时进入对应的多个章节。
+            if [[ "$subject" == \[*\]* ]]; then
+              PREFIX="${subject%%]*}"
+              if [[ "$PREFIX" == *"Feat"* ]]; then FEAT_LINES="${FEAT_LINES}- ${subject}\n"; fi
+              if [[ "$PREFIX" == *"Fix"* ]]; then FIX_LINES="${FIX_LINES}- ${subject}\n"; fi
+              if [[ "$PREFIX" == *"Security"* ]]; then SEC_LINES="${SEC_LINES}- ${subject}\n"; fi
+              if [[ "$PREFIX" == *"Chore"* || "$PREFIX" == *"Docs"* ]]; then CHORE_LINES="${CHORE_LINES}- ${subject}\n"; fi
+              if [[ "$PREFIX" != *"Feat"* && "$PREFIX" != *"Fix"* && "$PREFIX" != *"Security"* && "$PREFIX" != *"Chore"* && "$PREFIX" != *"Docs"* ]]; then
+                OTHER_LINES="${OTHER_LINES}- ${subject}\n"
+              fi
+            else
+              OTHER_LINES="${OTHER_LINES}- ${subject}\n"
+            fi
           done < <(git log --pretty=format:"%s" ${PREV_TAG:+"$PREV_TAG..HEAD"} 2>/dev/null)
 
           cat > "$GITHUB_WORKSPACE/rel_msg.txt" << EOF
           # HugoAura Enhanced 新版本已发布
 
-          **版本类型：⌛️ Release Candidate 版**
+          **版本类型：${RELEASE_TYPE}**
 
           **版本号：** \`${TAG_NAME}\`
 
