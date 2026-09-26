@@ -19,6 +19,10 @@ jobs:
         uses: actions/checkout@v5
         with:
           path: "./HugoAura-Code"
+          # 生成更新日志需要完整提交历史与全部 tag: checkout 默认 fetch-depth=1
+          # 且不拉取 tag, 会导致 PREV_TAG 为空、git log 只剩一条提交,
+          # 更新日志整段为空 (v0.3.0 即因此丢了日志)。
+          fetch-depth: 0
 
       - name: Build artifacts
         run: |
@@ -55,9 +59,10 @@ jobs:
           esac
 
           # 找上一个 tag (按创建时间排序, 排除当前 tag)
-          # 必须排除 pack.yml 产生的 vAutoBuild-<hash>: 它们数量远超正式版本 tag,
-          # 若不过滤, 这里会选中最近一次 CI 构建, 导致更新日志只剩几条甚至为空。
-          PREV_TAG=$(git tag --sort=-creatordate | grep -v "^${TAG_NAME}$" | grep -v "^vAutoBuild" | head -n 1 || true)
+          # 只接受 v<数字>.<数字>.<数字> 形式的版本 tag: pack.yml 产生的
+          # vAutoBuild-<hash> 数量远超正式版本 tag, 若不过滤会选中最近一次 CI
+          # 构建, 导致更新日志只剩几条甚至为空; 该正则同时也排除任何非版本标记 tag。
+          PREV_TAG=$(git tag --sort=-creatordate | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+" | grep -v "^${TAG_NAME}$" | head -n 1 || true)
 
           # 按 commit message 前缀分类生成更新日志
           FEAT_LINES=""
@@ -66,7 +71,9 @@ jobs:
           SEC_LINES=""
           OTHER_LINES=""
 
-          while IFS= read -r subject; do
+          # `|| [ -n "$subject" ]` 不可省: git log 的输出末行不带换行符,
+          # 缺了它 read 会以失败退出码丢掉最后一条 (只有一条提交时即全部丢失)。
+          while IFS= read -r subject || [ -n "$subject" ]; do
             [ -z "$subject" ] && continue
             case "$subject" in Merge\ *) continue ;; esac
 
@@ -121,6 +128,13 @@ jobs:
           add_section "🔄 Chore / 杂项 & Docs / 文档" "$CHORE_LINES"
           add_section "📝 Other / 其他" "$OTHER_LINES"
 
+          # 找不到前置 tag 时 compare 链接会退化成 "...<tag>" 这类坏链接, 改用提交列表页
+          if [ -n "$PREV_TAG" ]; then
+            FULL_CHANGELOG="https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${TAG_NAME}"
+          else
+            FULL_CHANGELOG="https://github.com/${{ github.repository }}/commits/${TAG_NAME}"
+          fi
+
           cat >> "$GITHUB_WORKSPACE/rel_msg.txt" << EOF
 
           # Version alignment / 版本对齐信息
@@ -133,7 +147,7 @@ jobs:
 
           ---
 
-          **完整更新日志：** \`https://github.com/${{ github.repository }}/compare/${PREV_TAG:-""}...$TAG_NAME\`
+          **完整更新日志：** \`${FULL_CHANGELOG}\`
 
           **如果您使用此版本发现了问题，请将此问题反馈至 Issues，并附上图片或复现步骤**
           EOF
