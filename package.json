@@ -1,6 +1,6 @@
 {
   "name": "HugoAura",
-  "version": "v0.2.0-rc2-p2",
+  "version": "v0.3.0",
   "description": "Aura for SeewoHugo",
   "dependencies": {},
   "devDependencies": {
