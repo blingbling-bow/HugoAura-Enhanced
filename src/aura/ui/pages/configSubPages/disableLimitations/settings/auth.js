@@ -414,7 +414,7 @@ const authSettings = [
         restart: true,
         reload: false,
         tip: true,
-        tipTitle: "启用后, 按下 Ctrl + Shift + I 即可打开 DevTools",
+        tipTitle: "启用并重启管家后, 按 Ctrl + Shift + I / Ctrl + Shift + C / F12 均可打开 DevTools",
         warning: true,
         warningContent:
           "在操作不当的情况下, 有可能造成 DevTools 永久无法激活 (Electron 的 Bug), 此时请使用 Chrome 远程调试",

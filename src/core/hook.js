@@ -199,8 +199,15 @@ const launcher = ({ central, windowName, config }) => {
   }
 
   // 管家 4010+ 的快捷键模块在加载时就固化了 canOpenDevTool=false,
-  // 导致其 Ctrl+Shift+C 永远不会注册; 由 Aura 自行注册快捷键兜底
+  // 导致其自身的 DevTools 快捷键永远不会注册; 由 Aura 自行注册快捷键兜底。
+  // 注意: globalShortcut.register 在注册失败 (被其它程序占用) 时只返回 false
+  // 而不抛异常, 因此必须用 isRegistered 逐个复核, 否则会误判为注册成功。
   if (loadedConfig.devTools && !global.__HUGO_AURA__.devToolsShortcutRegistered) {
+    const devToolsShortcuts = [
+      "CommandOrControl+Shift+I",
+      "CommandOrControl+Shift+C",
+      "F12",
+    ];
     try {
       const { globalShortcut } = electron;
       const openAllDevTools = () => {
@@ -212,10 +219,35 @@ const launcher = ({ central, windowName, config }) => {
           }
         }
       };
-      globalShortcut.register("CommandOrControl+Shift+C", openAllDevTools);
-      globalShortcut.register("F12", openAllDevTools);
-      global.__HUGO_AURA__.devToolsShortcutRegistered = true;
-      console.log("[HugoAura / Hook] DevTools shortcuts registered (Ctrl+Shift+C / F12)");
+
+      const okShortcuts = [];
+      const failedShortcuts = [];
+      for (const accelerator of devToolsShortcuts) {
+        try {
+          globalShortcut.register(accelerator, openAllDevTools);
+        } catch (err) {
+          console.warn(`[HugoAura / Hook] DevTools shortcut ${accelerator} threw:`, err);
+        }
+        if (globalShortcut.isRegistered(accelerator)) {
+          okShortcuts.push(accelerator);
+        } else {
+          failedShortcuts.push(accelerator);
+        }
+      }
+
+      // 只要有一个键注上就算安装完成, 避免每次配置刷新都重复尝试
+      global.__HUGO_AURA__.devToolsShortcutRegistered = okShortcuts.length > 0;
+      if (okShortcuts.length > 0) {
+        console.log(`[HugoAura / Hook] DevTools shortcuts registered: ${okShortcuts.join(" / ")}`);
+      }
+      if (failedShortcuts.length > 0) {
+        console.warn(
+          `[HugoAura / Hook] DevTools shortcuts NOT registered (占用或冲突): ${failedShortcuts.join(" / ")}`
+        );
+      }
+      if (okShortcuts.length === 0) {
+        console.error("[HugoAura / Hook] No DevTools shortcut available, please use Chrome remote debugging.");
+      }
     } catch (err) {
       console.error("[HugoAura / Hook] Failed to register devtools shortcuts:", err);
     }
