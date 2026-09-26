@@ -399,6 +399,30 @@ const authSettings = [
             .noActivationCodeReset = newVal;
         },
       },
+      {
+        index: 8,
+        id: "keepPasswordUnlock",
+        type: "switch",
+        name: "联网时保留密码解锁",
+        description:
+          "启用后, 集控下发「联网时禁用密码解锁」策略 (messageType 1214) 时, 锁屏仍保留「密码」解锁页签 (扫码 / 激活码方式不受影响)",
+        restart: false,
+        reload: false,
+        associateVal: [],
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/keepPasswordUnlock"
+          ].enabled;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/keepPasswordUnlock"
+          ].enabled = newVal;
+        },
+      },
     ],
   },
   {

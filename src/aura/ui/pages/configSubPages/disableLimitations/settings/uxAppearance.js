@@ -190,7 +190,7 @@ const uxAndAppearanceSettings = [
     ],
   },
   {
-    id: 1,
+    id: 2,
     categoryName: "广告拦截",
     child: [
       {
@@ -222,8 +222,110 @@ const uxAndAppearanceSettings = [
     ],
   },
   {
-    id: 2,
-    categoryName: "外观与体验",
+    id: 3,
+    categoryName: "悬浮卡片",
+    child: [
+      {
+        index: 0,
+        id: "hideCountdown",
+        type: "switch",
+        name: "隐藏倒计日组件",
+        description:
+          '启用后, 集控下发的倒计日卡片 ("距离XX仅有N天") 不在屏上显示 (指令照常处理, 关闭开关后卡片即可恢复显示)',
+        restart: false,
+        reload: false,
+        associateVal: [],
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/hideCountdown"
+          ].enabled;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/hideCountdown"
+          ].enabled = newVal;
+        },
+      },
+      {
+        index: 1,
+        id: "hideFastToolbar",
+        type: "switch",
+        name: "隐藏下课锁屏卡片",
+        description:
+          "启用后, 悬浮的下课锁屏卡片将不再显示 (锁屏页面本身不受影响)",
+        restart: false,
+        reload: false,
+        associateVal: [],
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/hideFastToolbar"
+          ].enabled;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/hideFastToolbar"
+          ].enabled = newVal;
+        },
+      },
+      {
+        index: 2,
+        id: "hideDesktopNotification",
+        type: "switch",
+        name: "隐藏常驻消息通知",
+        description:
+          "启用后, 悬浮于管家助手上方的桌面常驻消息通知卡片将不再显示",
+        restart: false,
+        reload: false,
+        associateVal: [],
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/hideDesktopNotification"
+          ].enabled;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/hideDesktopNotification"
+          ].enabled = newVal;
+        },
+      },
+      {
+        index: 3,
+        id: "hideDeviceLinkNotify",
+        type: "switch",
+        name: "隐藏周边设备连接提示",
+        description:
+          "启用后, 物联设备接入 / 断开时右下角的提示卡片不再弹出 (智能笔配对失败、麦克风电量不足等告警不受影响)",
+        restart: false,
+        reload: false,
+        associateVal: [],
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/hideDeviceLinkNotify"
+          ].enabled;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.networkRewrite[
+            "appearance/hideDeviceLinkNotify"
+          ].enabled = newVal;
+        },
+      },
+    ],
+  },
+  {
+    id: 4,
+    categoryName: "锁屏背景",
     child: [
       {
         index: 0,
@@ -302,126 +404,6 @@ const uxAndAppearanceSettings = [
             "appearance/customScreenLockBg"
           ].backgroundPath = newVal;
           return { valid: true };
-        },
-      },
-      {
-        index: 2,
-        id: "hideCountdown",
-        type: "switch",
-        name: "隐藏倒计日组件",
-        description:
-          '启用后, 集控下发的倒计日卡片 ("距离XX仅有N天") 不在屏上显示 (指令照常处理, 关闭开关后卡片即可恢复显示)',
-        restart: false,
-        reload: false,
-        associateVal: [],
-        auraIf: () => true,
-        defaultValue: false,
-        valueGetter: () => {
-          return global.__HUGO_AURA_CONFIG__.networkRewrite[
-            "appearance/hideCountdown"
-          ].enabled;
-        },
-        callbackFn: (newVal) => {
-          if (typeof newVal !== "boolean") return;
-          global.__HUGO_AURA_CONFIG__.networkRewrite[
-            "appearance/hideCountdown"
-          ].enabled = newVal;
-        },
-      },
-      {
-        index: 3,
-        id: "hideFastToolbar",
-        type: "switch",
-        name: "隐藏下课锁屏卡片",
-        description:
-          "启用后, 悬浮的下课锁屏卡片将不再显示 (锁屏页面本身不受影响)",
-        restart: false,
-        reload: false,
-        associateVal: [],
-        auraIf: () => true,
-        defaultValue: false,
-        valueGetter: () => {
-          return global.__HUGO_AURA_CONFIG__.networkRewrite[
-            "appearance/hideFastToolbar"
-          ].enabled;
-        },
-        callbackFn: (newVal) => {
-          if (typeof newVal !== "boolean") return;
-          global.__HUGO_AURA_CONFIG__.networkRewrite[
-            "appearance/hideFastToolbar"
-          ].enabled = newVal;
-        },
-      },
-      {
-        index: 4,
-        id: "hideDesktopNotification",
-        type: "switch",
-        name: "隐藏常驻消息通知",
-        description:
-          "启用后, 悬浮于管家助手上方的桌面常驻消息通知卡片将不再显示",
-        restart: false,
-        reload: false,
-        associateVal: [],
-        auraIf: () => true,
-        defaultValue: false,
-        valueGetter: () => {
-          return global.__HUGO_AURA_CONFIG__.networkRewrite[
-            "appearance/hideDesktopNotification"
-          ].enabled;
-        },
-        callbackFn: (newVal) => {
-          if (typeof newVal !== "boolean") return;
-          global.__HUGO_AURA_CONFIG__.networkRewrite[
-            "appearance/hideDesktopNotification"
-          ].enabled = newVal;
-        },
-      },
-      {
-        index: 5,
-        id: "hideDeviceLinkNotify",
-        type: "switch",
-        name: "隐藏周边设备连接提示",
-        description:
-          "启用后, 物联设备接入 / 断开时右下角的提示卡片不再弹出 (智能笔配对失败、麦克风电量不足等告警不受影响)",
-        restart: false,
-        reload: false,
-        associateVal: [],
-        auraIf: () => true,
-        defaultValue: false,
-        valueGetter: () => {
-          return global.__HUGO_AURA_CONFIG__.networkRewrite[
-            "appearance/hideDeviceLinkNotify"
-          ].enabled;
-        },
-        callbackFn: (newVal) => {
-          if (typeof newVal !== "boolean") return;
-          global.__HUGO_AURA_CONFIG__.networkRewrite[
-            "appearance/hideDeviceLinkNotify"
-          ].enabled = newVal;
-        },
-      },
-      {
-        index: 6,
-        id: "keepPasswordUnlock",
-        type: "switch",
-        name: "联网时保留密码解锁",
-        description:
-          "启用后, 集控下发「联网时禁用密码解锁」策略 (messageType 1214) 时, 锁屏仍保留「密码」解锁页签 (扫码 / 激活码方式不受影响)",
-        restart: false,
-        reload: false,
-        associateVal: [],
-        auraIf: () => true,
-        defaultValue: false,
-        valueGetter: () => {
-          return global.__HUGO_AURA_CONFIG__.networkRewrite[
-            "appearance/keepPasswordUnlock"
-          ].enabled;
-        },
-        callbackFn: (newVal) => {
-          if (typeof newVal !== "boolean") return;
-          global.__HUGO_AURA_CONFIG__.networkRewrite[
-            "appearance/keepPasswordUnlock"
-          ].enabled = newVal;
         },
       },
     ],
