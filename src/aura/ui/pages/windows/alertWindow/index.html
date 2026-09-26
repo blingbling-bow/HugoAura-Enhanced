@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Aura Alert</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        overflow: hidden;
+        font-family: -apple-system, "Microsoft YaHei", sans-serif;
+        user-select: none;
+        cursor: default;
+      }
+      .alert {
+        margin: 14px;
+        border-radius: 10px;
+        padding: 14px 18px;
+        border: 2px solid;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 280px;
+      }
+      .alert.notify {
+        background: #fff3cd;
+        border-color: #fd7e14;
+        color: #856404;
+      }
+      .alert.blocked {
+        background: #f8d7da;
+        border-color: #dc3545;
+        color: #721c24;
+      }
+      .icon {
+        font-size: 24px;
+        flex-shrink: 0;
+        line-height: 1;
+      }
+      .text {
+        flex: 1;
+      }
+      .title {
+        margin: 0 0 2px;
+        font-size: 14px;
+        font-weight: bold;
+      }
+      .meta {
+        margin: 0;
+        font-size: 11px;
+        opacity: 0.8;
+      }
+      .close {
+        font-size: 18px;
+        cursor: pointer;
+        opacity: 0.6;
+        flex-shrink: 0;
+        line-height: 1;
+      }
+      .close:hover {
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="alert notify" id="alert">
+      <span class="icon" id="icon">&#9888;</span>
+      <div class="text">
+        <p class="title" id="title"></p>
+        <p class="meta" id="meta"></p>
+      </div>
+      <span class="close" id="close">&#215;</span>
+    </div>
+    <script>
+      (() => {
+        const params = new URLSearchParams(location.search);
+        const type = params.get("type") === "blocked" ? "blocked" : "notify";
+        const alertEl = document.getElementById("alert");
+        const iconEl = document.getElementById("icon");
+        alertEl.className = `alert ${type}`;
+        iconEl.textContent = type === "blocked" ? "\u{1F6E1}" : "\u26A0";
+        document.getElementById("title").textContent = params.get("title") || "";
+        document.getElementById("meta").textContent = params.get("meta") || "";
+        document.getElementById("close").onclick = () => window.close();
+        // 主进程超时会 destroy 窗口; 此处兜底, 防止定时器丢失导致窗体常驻
+        const duration = Number(params.get("duration")) || 10000;
+        setTimeout(() => {
+          try {
+            window.close();
+          } catch (err) {}
+        }, duration + 1500);
+      })();
+    </script>
+  </body>
+</html>

@@ -20,6 +20,7 @@
 
 const { withRetry, installWsInterceptor } = require("./retryHook");
 const auditWriter = require("./auditWriter");
+const alertWindow = require("./alertWindow");
 
 // 关机指令匹配规则
 const POWER_OFF_RULES = ["/powerOff/confirm"];
@@ -112,6 +113,8 @@ const hookFn = (central) => {
     writeAudit(record);
     pushAuditEvent(record);
     pushPowerOffNotify(record);
+    // 兜底: 注入窗口全部不可见时弹独立置顶小窗, 否则提醒会静默丢失
+    alertWindow.showAlertWindow(electron, record);
 
     if (cfg.mode === "block") {
       console.log(

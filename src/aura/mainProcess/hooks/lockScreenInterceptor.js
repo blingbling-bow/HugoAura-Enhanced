@@ -67,6 +67,7 @@
 
 const { withRetry, getPrototypeMethod, resolveModule } = require("./retryHook");
 const auditWriter = require("./auditWriter");
+const alertWindow = require("./alertWindow");
 
 // 锁屏指令特征: messageType 1211, data.screenLockStatus === 1 (1=锁屏, 0=解锁)
 const LOCK_MESSAGE_TYPE = 1211;
@@ -395,7 +396,11 @@ const hookFn = (central) => {
     };
     writeAudit(record);
     pushAuditEvent(record);
-    if (!passedThrough) pushLockNotify(record);
+    if (!passedThrough) {
+      pushLockNotify(record);
+      // 兜底: 注入窗口全部不可见时弹独立置顶小窗, 否则提醒会静默丢失
+      alertWindow.showAlertWindow(electron, record);
+    }
 
     if (passedThrough) {
       console.warn(
