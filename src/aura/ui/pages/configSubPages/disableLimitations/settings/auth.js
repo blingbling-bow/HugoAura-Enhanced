@@ -380,7 +380,7 @@ const authSettings = [
         type: "switch",
         name: "激活码输错不换码",
         description:
-          "默认行为: 激活码连错 5 次会更换新码, 需重新扫码。开启后一次扫码可反复尝试, 仍会提示激活码错误",
+          "默认行为: 激活码连错 5 次会更换新码, 需重新扫码。开启后一次扫码可反复尝试, 仍会提示激活码错误 (下次锁屏生效)",
         restart: false,
         reload: false,
         associateVal: ["rewrite.vendor/screenLock.enabled"],
@@ -689,32 +689,6 @@ const authSettings = [
         callbackFn: (newVal) => {
           global.__HUGO_AURA_CONFIG__.auraSettings.lockScreenIntercept.mode =
             newVal;
-        },
-      },
-    ],
-  },
-  {
-    id: 8,
-    categoryName: "解锁审计",
-    child: [
-      {
-        index: 0,
-        id: "enableUnlockAudit",
-        type: "switch",
-        name: "记录解锁事件",
-        description:
-          "记录远程 / 激活码 / 密码三种解锁方式与时间, 写入 logs/cloudCommandAudit.log",
-        restart: false,
-        reload: false,
-        associateVal: null,
-        auraIf: () => true,
-        defaultValue: false,
-        valueGetter: () => {
-          return global.__HUGO_AURA_CONFIG__.auraSettings.unlockAudit.enabled;
-        },
-        callbackFn: (newVal) => {
-          if (typeof newVal !== "boolean") return;
-          global.__HUGO_AURA_CONFIG__.auraSettings.unlockAudit.enabled = newVal;
         },
       },
     ],

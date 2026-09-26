@@ -311,6 +311,19 @@ const initAuditSubPage = () => {
       </div>
       <div class="aura-settings-entry">
         <div class="aura-settings-entry-info-container">
+          <p class="aura-settings-entry-title">记录解锁事件</p>
+          <p class="aura-settings-entry-desc">
+            记录远程 / 激活码 / 密码三种解锁方式与时间, 与指令记录写入同一份日志, 便于对照"谁下发了锁屏、谁解锁了"。开启后立即生效。
+          </p>
+        </div>
+        <div class="aura-settings-entry-operation-area">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch" id="auditUnlockSwitch"/>
+          </div>
+        </div>
+      </div>
+      <div class="aura-settings-entry">
+        <div class="aura-settings-entry-info-container">
           <p class="aura-settings-entry-title">记录保留天数</p>
           <p class="aura-settings-entry-desc">
             超过该天数的审计记录将在写入时自动清除, 防止日志无限增长。
@@ -381,31 +394,41 @@ const initAuditSubPage = () => {
   const refreshBtn = document.getElementById("auditRefreshBtn");
   const clearBtn = document.getElementById("auditClearBtn");
   const logAllSwitch = document.getElementById("auditLogAllSwitch");
+  const unlockSwitch = document.getElementById("auditUnlockSwitch");
   const retentionInput = document.getElementById("auditRetentionDays");
 
   // 初始化审计配置控件 (读取当前配置)
   const initAuditControls = () => {
-    const auditCfg =
-      global.__HUGO_AURA_CONFIG__ &&
-      global.__HUGO_AURA_CONFIG__.auraSettings &&
-      global.__HUGO_AURA_CONFIG__.auraSettings.cloudCommandAudit;
-    if (!auditCfg) return;
-    logAllSwitch.checked = !!auditCfg.enabled;
-    retentionInput.value = auditCfg.retentionDays || 7;
+    const auraSettings =
+      global.__HUGO_AURA_CONFIG__ && global.__HUGO_AURA_CONFIG__.auraSettings;
+    if (!auraSettings) return;
+    const auditCfg = auraSettings.cloudCommandAudit;
+    if (auditCfg) {
+      logAllSwitch.checked = !!auditCfg.enabled;
+      retentionInput.value = auditCfg.retentionDays || 7;
+    }
+    unlockSwitch.checked = !!(
+      auraSettings.unlockAudit && auraSettings.unlockAudit.enabled
+    );
   };
 
-  // 保存审计配置 (全量记录 + 保留天数)
+  // 保存审计配置 (全量记录 + 解锁事件记录 + 保留天数)
   const saveAuditControls = () => {
     try {
-      const auditCfg =
-        global.__HUGO_AURA_CONFIG__ &&
-        global.__HUGO_AURA_CONFIG__.auraSettings &&
-        global.__HUGO_AURA_CONFIG__.auraSettings.cloudCommandAudit;
-      if (!auditCfg) return;
-      auditCfg.enabled = logAllSwitch.checked;
-      const days = parseInt(retentionInput.value, 10);
-      auditCfg.retentionDays =
-        Number.isFinite(days) && days >= 1 && days <= 365 ? days : 7;
+      const auraSettings =
+        global.__HUGO_AURA_CONFIG__ && global.__HUGO_AURA_CONFIG__.auraSettings;
+      if (!auraSettings) return;
+      const auditCfg = auraSettings.cloudCommandAudit;
+      if (auditCfg) {
+        auditCfg.enabled = logAllSwitch.checked;
+        const days = parseInt(retentionInput.value, 10);
+        auditCfg.retentionDays =
+          Number.isFinite(days) && days >= 1 && days <= 365 ? days : 7;
+      }
+      // 解锁事件审计开关 (unlockAudit hook 每个解锁事件读一次配置, 保存即生效)
+      if (auraSettings.unlockAudit) {
+        auraSettings.unlockAudit.enabled = unlockSwitch.checked;
+      }
       if (global.__HUGO_AURA_CONFIG_MGR__) {
         global.__HUGO_AURA_CONFIG_MGR__.writeConfig(global.__HUGO_AURA_CONFIG__);
       }
@@ -425,6 +448,7 @@ const initAuditSubPage = () => {
   refreshBtn.addEventListener("click", loadLogs);
   clearBtn.addEventListener("click", clearLogs);
   logAllSwitch.addEventListener("change", saveAuditControls);
+  unlockSwitch.addEventListener("change", saveAuditControls);
   retentionInput.addEventListener("change", saveAuditControls);
 
   initAuditControls();
