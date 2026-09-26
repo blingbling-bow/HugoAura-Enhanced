@@ -13,7 +13,7 @@
  *   1. block 模式: 吞掉锁屏指令, 设备不会被远程锁屏, 并伪造锁屏回执
  *      (模块 310 → POST /screenlock/lockfeedback), 使集控端仍显示"已锁屏",
  *      避免对端判定指令未生效而重发或留下异常记录。
- *   2. notify 模式: 延迟 10 秒放行指令, 弹窗提醒用户; 期间重复下发的
+ *   2. notify 模式: 延迟 5 秒放行指令, 弹窗提醒用户; 期间重复下发的
  *      指令被去抖吞掉 (只保留一次延迟放行)。
  *   3. 解锁指令的冗余兜底 (伪造锁屏回执后, 集控端随后必然回下解锁指令):
  *      - 只要管家侧存在任何真实锁屏迹象 (message 非空 或 已创建锁屏窗口),
@@ -24,8 +24,8 @@
  *        与原生完全一致, 唯一差别是省掉原 onMessage 在"无锁"分支打出的
  *        "解锁指令异常，不存在锁屏" 异常日志 (该日志出现在被拦截过的设备上
  *        即为破绽)。接管失败时原样交回管家, 保证解锁链路零影响;
- *      - 若解锁指令落在 notify 模式的 10 秒延迟窗口内, 同时取消那次待放行的
- *        锁屏, 避免"已代答解锁、10 秒后却真的锁屏"的矛盾。
+ *      - 若解锁指令落在 notify 模式的 5 秒延迟窗口内, 同时取消那次待放行的
+ *        锁屏, 避免"已代答解锁、5 秒后却真的锁屏"的矛盾。
  *      - 回执通道不可用时一律放行真实锁屏 (fail-closed), 见下。
  *   4. 审计日志写入 cloudCommandAudit.log (复用云端指令审计通道)。
  *
@@ -72,7 +72,7 @@ const auditWriter = require("./auditWriter");
 const LOCK_MESSAGE_TYPE = 1211;
 const LOCK_STATUS_LOCKED = 1;
 const LOCK_STATUS_UNLOCKED = 0;
-const NOTIFY_DELAY_MS = 10000;
+const NOTIFY_DELAY_MS = 5000;
 
 // 回执上报: 管家原逻辑在锁屏/解锁时分别调用模块 310 / 311
 // (POST /forward/SeewoHugoHttp/api/v1/screenlock/{lock,unlock}feedback)
@@ -280,7 +280,7 @@ const hookFn = (central) => {
    * @returns {boolean} true=已接管 / false=交回管家原逻辑
    */
   const handleIdleUnlock = (handler, parsed, mode) => {
-    // 冗余兜底: notify 模式下若解锁指令在 10 秒延迟窗口内到达, 必须取消那次
+    // 冗余兜底: notify 模式下若解锁指令在 5 秒延迟窗口内到达, 必须取消那次
     // 待放行的锁屏, 否则解锁被接管后延迟放行仍会真实锁屏, 与对端状态矛盾。
     if (pendingLockTimer) {
       clearTimeout(pendingLockTimer);
@@ -411,7 +411,7 @@ const hookFn = (central) => {
       return true; // 吞掉指令, 设备不会被锁屏
     }
 
-    // notify 模式: 延迟 10 秒后放行, 给用户保存工作的时间
+    // notify 模式: 延迟 5 秒后放行, 给用户保存工作的时间
     console.log(
       `[HugoAura / LockScreen] Remote lock-screen detected, delaying ${NOTIFY_DELAY_MS / 1000}s before dispatch (notify mode)`
     );

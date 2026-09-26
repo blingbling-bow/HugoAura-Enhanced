@@ -159,7 +159,7 @@
 
       powerOffAlertEl = document.createElement("div");
       powerOffAlertEl.style.cssText =
-        "position:fixed;top:20px;right:20px;z-index:2147483647;" +
+        "position:fixed;bottom:20px;right:20px;z-index:2147483647;" +
         'font-family:-apple-system,"Microsoft YaHei",sans-serif;';
 
       const inner = document.createElement("div");
@@ -176,9 +176,14 @@
       textWrap.style.cssText = "flex:1;";
 
       const title = document.createElement("p");
+      // 延迟秒数须与主进程保持一致: 锁屏见 lockScreenInterceptor 的 NOTIFY_DELAY_MS,
+      // 关机见 powerOffInterceptor 的 notify 分支
+      const delaySeconds = isLock ? 5 : 10;
       title.textContent = blocked
         ? `已阻止${actionName}`
-        : `检测到${actionName}, 10 秒后执行`;
+        : isLock
+          ? `即将在 ${delaySeconds} 秒后锁屏`
+          : `检测到${actionName}, ${delaySeconds} 秒后执行`;
       title.style.cssText = `margin:0 0 2px;font-size:14px;font-weight:bold;color:${color.text};`;
 
       const meta = document.createElement("p");
@@ -204,8 +209,8 @@
 
       (document.body || document.documentElement).appendChild(powerOffAlertEl);
 
-      // 10 秒后自动消失
-      powerOffAutoHideTimer = setTimeout(hideAlert, 10000);
+      // 锁屏延迟 5 秒后即真正锁屏, 提示随之收起; 关机沿用 10 秒
+      powerOffAutoHideTimer = setTimeout(hideAlert, isLock ? 5000 : 10000);
     };
 
     ipcRenderer.on("$aura.powerOff.onBlocked", (_event, arg) => {

@@ -203,11 +203,7 @@ const launcher = ({ central, windowName, config }) => {
   // 注意: globalShortcut.register 在注册失败 (被其它程序占用) 时只返回 false
   // 而不抛异常, 因此必须用 isRegistered 逐个复核, 否则会误判为注册成功。
   if (loadedConfig.devTools && !global.__HUGO_AURA__.devToolsShortcutRegistered) {
-    const devToolsShortcuts = [
-      "CommandOrControl+Shift+I",
-      "CommandOrControl+Shift+C",
-      "F12",
-    ];
+    const devToolsShortcuts = ["CommandOrControl+Shift+I", "F12"];
     try {
       const { globalShortcut } = electron;
       const openAllDevTools = () => {
