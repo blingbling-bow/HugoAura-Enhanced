@@ -9,8 +9,10 @@
  * 屏保触发消息, 使屏幕永不进入屏保状态。
  *
  * 风险处理:
- * 1. 集控侧异常: 拦截后主动调用原始 stopScreensaver() 上报 screenSaver/reset,
- *    让集控认为设备已正常关闭屏保, 避免状态卡死。
+ * 1. 集控侧状态一致性: 默认 "伪装屏保状态" (auraSettings.fakeScreenSaverState) ——
+ *    拦截后不向集控上报, 集控会认为屏保已正常开启; 关闭该配置时沿用旧行为,
+ *    主动调用原始 stopScreensaver() 上报 screenSaver/reset, 告知集控屏保已关闭。
+ *    该配置只影响上报行为, 不影响拦截本身。
  * 2. 模块 ID 版本漂移: 源头拦截与窗口守卫各自独立 try-catch, 互不影响;
  *    自检失败时仅跳过源头拦截, 窗口守卫仍生效。
  * 3. 误拦截其他窗口: 守卫用正则精确匹配 screensaver.html, 且监听
@@ -66,6 +68,14 @@ const hookFn = (central) => {
   const shouldDisable = () => {
     const config = readConfig();
     return Boolean(config && config.auraSettings && config.auraSettings.disableScreenSaver);
+  };
+
+  // 伪装屏保状态 (默认开启): 拦截后不主动上报, 集控会认为屏保已正常开启。
+  // 关闭该项则沿用旧行为, 在拦截的同时上报 "屏保已关闭"。
+  const shouldFakeState = () => {
+    const config = readConfig();
+    if (!config || !config.auraSettings) return true;
+    return config.auraSettings.fakeScreenSaverState !== false;
   };
 
   // 同步希沃全局配置中的置顶开关；其置顶队列每秒读取该值。
@@ -124,9 +134,10 @@ const hookFn = (central) => {
     screensaver.onMessage = (e) => {
       if (shouldDisable() && e && e.url === "/displayScreenSaver") {
         console.debug("[HugoAura / Screensaver] Blocked screen saver trigger message.");
-        // 风险1: 主动上报 "屏保已关闭", 避免集控侧状态卡死
-        // stopScreensaver 会执行: closeWindow(无窗口,无操作) + share(null) + 上报 reset + outQueue
-        if (!resetReportPending) {
+        // 风险1: 默认伪装屏保状态, 不上报, 让集控认为屏保已开启;
+        // 关闭伪装时才主动上报 "屏保已关闭" (stopScreensaver 会执行:
+        // closeWindow(无窗口,无操作) + share(null) + 上报 reset + outQueue), 避免集控侧状态卡死
+        if (!shouldFakeState() && !resetReportPending) {
           resetReportPending = true;
           setTimeout(() => {
             try {

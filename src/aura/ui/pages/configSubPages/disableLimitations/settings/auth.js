@@ -504,6 +504,34 @@ const authSettings = [
           global.__HUGO_AURA_CONFIG__.auraSettings.disableScreenSaver = newVal;
         },
       },
+      {
+        index: 1,
+        id: "fakeScreenSaverState",
+        type: "switch",
+        name: "伪装屏保状态",
+        description:
+          "拦截屏保后不向集控上报, 使集控认为屏保已正常开启",
+        restart: false,
+        reload: false,
+        tip: true,
+        tipTitle:
+          '仅影响拦截时的上报行为; 关闭后会在拦截的同时向集控上报"屏保已关闭"',
+        warning: true,
+        warningContent:
+          '关闭伪装后集控可能检测到"屏保未运行"并触发策略重下发, 请在确认学校集控策略后再关闭',
+        associateVal: ["auraSettings.disableScreenSaver"],
+        auraIf: () => {
+          return global.__HUGO_AURA_CONFIG__.auraSettings.disableScreenSaver;
+        },
+        defaultValue: true,
+        valueGetter: () => {
+          return global.__HUGO_AURA_CONFIG__.auraSettings.fakeScreenSaverState;
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.auraSettings.fakeScreenSaverState = newVal;
+        },
+      },
     ],
   },
   {
