@@ -120,8 +120,6 @@ const showAlertWindow = (electron, record) => {
       y: workArea.y + workArea.height - height - 20,
       frame: false,
       transparent: true,
-      // #00000000: 全透明黑。不设底色时 Windows 会把透明窗铺成白底。
-      backgroundColor: "#00000000",
       resizable: false,
       movable: false,
       minimizable: false,

@@ -179,10 +179,6 @@ const launcher = ({ central, windowName, config }) => {
     installHook("AutoOpenUsb", "../aura/mainProcess/hooks/autoOpenUsb");
     installHook("KeepPasswordUnlock", "../aura/mainProcess/hooks/keepPasswordUnlock");
     installHook("UnlockAudit", "../aura/mainProcess/hooks/unlockAudit");
-    installHook(
-      "TransparentWindowBackground",
-      "../aura/mainProcess/hooks/transparentWindowBackground"
-    );
 
     global.__HUGO_AURA__.auraHooksInstalled = true;
   }
