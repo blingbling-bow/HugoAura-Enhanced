@@ -17,10 +17,18 @@
  * (网络层兜底见 jsRewrite/network/disableAppUpdate.js,
  *  负责拦截 upgradeLastVersion 升级触发请求。)
  *
- * 版本容错: 自检失败时优雅降级, 不影响 /disableCover 等其他消息。
+ * 版本容错: 模块号 (394) 为构建相关的快路径; 失配时按工厂源码中的
+ * /serviceUpgrade/status 特征扫描重新定位 (该 URL 全包仅此一处)。
+ * 自检始终失败时优雅降级, 不影响 /disableCover 等其他消息。
  */
 
-const { withRetry, getPrototypeMethod, resolveModule } = require("./retryHook");
+const {
+  withRetry,
+  getPrototypeMethod,
+  resolveModule,
+  resolveByScan,
+  shouldScan,
+} = require("./retryHook");
 
 const hookFn = (central) => {
   // 自检失败诊断日志: 只记录一次
@@ -41,22 +49,41 @@ const hookFn = (central) => {
     return Boolean(config && config.auraSettings && config.auraSettings.disableUpdate);
   };
 
+  // 运行时自检: 该模块是否为升级状态分发器 (版本容错)。
+  // 特征串 /serviceUpgrade/status 是模块作用域常量, 不在 onMessage 方法体内,
+  // 因此改用 onMessage 体内的 UPGRADE_STATUS / UPGRADE_FEEDBACK 确认身份。
+  const isUpgradeHandler = (handler) => {
+    if (!handler || typeof handler.onMessage !== "function") return false;
+    const unbound = getPrototypeMethod(handler, "onMessage");
+    if (typeof unbound !== "function") return false;
+    const src = String(unbound);
+    return src.includes("UPGRADE_STATUS") || src.includes("UPGRADE_FEEDBACK");
+  };
+
   // 单次安装尝试: 成功返回 true, 模块未就绪返回 false (触发重试)
   const tryInstall = () => {
     // 先取模块导出; 若 central 返回的是未执行工厂, resolveModule 会兜底执行
-    const messageHandler = resolveModule(central, 394);
+    let messageHandler = resolveModule(central, 394);
 
-    // 运行时自检: 模块 394 是否为升级状态分发器 (版本容错)
-    // 特征串 /serviceUpgrade/status 是模块作用域常量, 不在 onMessage 方法体内,
-    // 因此改用 onMessage 体内的 UPGRADE_STATUS 字符串来确认身份。
-    const unboundOnMessage = getPrototypeMethod(messageHandler, "onMessage");
-    const isUpgradeMessageHandler =
-      messageHandler &&
-      typeof messageHandler.onMessage === "function" &&
-      typeof unboundOnMessage === "function" &&
-      String(unboundOnMessage).includes("UPGRADE_STATUS");
+    // 模块号失配兜底: 模块 ID 是 webpack 构建产物, 管家换版本即可能漂移;
+    // 一旦失配, 单纯重试永远不会成功 (真机日志中的 "Gave up" 多属此类)。
+    // 按"工厂源码含 /serviceUpgrade/status"(全包唯一) 重新定位。
+    if (!isUpgradeHandler(messageHandler) && shouldScan("disableUpdate")) {
+      const recovered = resolveByScan(
+        central,
+        ["/serviceUpgrade/status"],
+        isUpgradeHandler
+      );
+      if (recovered) {
+        messageHandler = recovered.mod;
+        console.warn(
+          `[HugoAura / DisableUpdate] Module 394 unavailable, ` +
+            `recovered via ${recovered.how} (module ${recovered.id}).`
+        );
+      }
+    }
 
-    if (!isUpgradeMessageHandler) {
+    if (!isUpgradeHandler(messageHandler)) {
       if (!diagLogged) {
         diagLogged = true;
         const proto = Object.getPrototypeOf(messageHandler);
@@ -65,7 +92,9 @@ const hookFn = (central) => {
             `typeof(messageHandler)=${typeof messageHandler}, ` +
             `onMessage=${messageHandler && typeof messageHandler.onMessage}, ` +
             `proto.onMessage=${proto && typeof proto.onMessage}, ` +
-            `moduleTable=${!!(central.m && central.c)}`
+            `moduleTable=${!!(central.m && central.c)}, ` +
+            `tableEntries=${central.m ? Object.keys(central.m).length : 0}, ` +
+            `cacheEntries=${central.c ? Object.keys(central.c).length : 0}`
         );
       }
       console.debug(

@@ -10,6 +10,16 @@
  * 本工具将"安装函数"包装为可重试版本: 安装返回 false (或抛错) 时,
  * 按指数退避延迟重试, 直到成功或达到上限后优雅放弃。
  *
+ * 定位健壮性 (v0.3.1 加固):
+ *   模块 ID 是 webpack 构建产物, 管家每次发版都可能让其漂移; 一旦硬编码的
+ *   模块号失配, 单纯重试永远不会成功 (真机日志中的 "Gave up after 30
+ *   attempts" 多属此类)。因此本模块在固定 ID 之外提供两级兜底:
+ *     1. resolveModule 放宽"工厂函数"判定 —— 即使注入环境未暴露模块表
+ *        (central.m), 也能凭函数签名识别并手动执行工厂, 拿到实例。
+ *     2. resolveByScan 按特征扫描重新定位 —— 先在模块表里用工厂源码特征
+ *        过滤再执行 (避免为探测触发无关模块的副作用), 再退到模块缓存里
+ *        直接验证"已被应用执行过"的导出。
+ *
  * 用法:
  *   const { withRetry } = require("./retryHook");
  *   const install = () => { ... return true; };
@@ -49,13 +59,30 @@ const getPrototypeMethod = (instance, name) => {
 };
 
 /**
+ * 判断函数是否"形如 webpack 模块工厂"。
+ *
+ * 模块工厂的签名恒为三参数 (module, exports, require); 而模块自身导出
+ * 的业务函数不会长这样 (通常是零/一/二参数的箭头函数或普通函数)。
+ * 仅在注入环境没有暴露模块表 (central.m) 时才用它做兜底判定。
+ *
+ * @param {any} fn 待判定对象
+ * @returns {boolean}
+ */
+const looksLikeModuleFactory = (fn) => {
+  if (typeof fn !== "function") return false;
+  return /^function\s*\(\s*[\w$]+\s*,\s*[\w$]+\s*,\s*[\w$]+\s*\)/.test(
+    String(fn)
+  );
+};
+
+/**
  * 尝试获取模块的运行时导出 (带"工厂兜底")。
  *
  * 正常情况下 central(id) 即 webpack require, 直接返回模块实例。
  * 兜底场景: 个别注入环境下, central 对"尚未被应用执行过"的懒加载模块
- * 只返回模块工厂函数 (function(e,t,n)), 而非实例。此时若 central 暴露了
- * webpack 模块表 (central.m / central.c), 可手动执行工厂得到实例,
- * 并写入模块缓存, 保证应用后续真正加载该模块时复用同一个实例。
+ * 只返回模块工厂函数 (function(module, exports, require)), 而非实例。
+ * 此时手动执行工厂得到实例, 并写入模块缓存, 保证应用后续真正加载该模块
+ * 时复用同一个实例 (否则会出现"钩子挂在一个孤立实例上"的隐性失效)。
  *
  * @param {(id: number) => any} central 模块加载器
  * @param {number} id 模块 ID
@@ -63,18 +90,20 @@ const getPrototypeMethod = (instance, name) => {
  */
 const resolveModule = (central, id) => {
   let mod = central(id);
+  // 判定"返回值是否为未执行的工厂函数":
+  //   - 首选模块表比对 (最准确)
+  //   - 无模块表时退化为函数签名判断
+  const inTable = Boolean(central.m && central.m[id] === mod);
   const isFactory =
     mod &&
     typeof mod === "function" &&
-    central.m &&
-    central.c &&
-    central.m[id] === mod;
+    (inTable || (!central.m && looksLikeModuleFactory(mod)));
   if (isFactory) {
     try {
       const moduleObj = { i: id, l: false, exports: {} };
       mod(moduleObj, moduleObj.exports, central);
       mod = moduleObj.exports;
-      central.c[id] = moduleObj;
+      if (central.c) central.c[id] = moduleObj;
       console.warn(
         `[HugoAura / Retry] Module ${id} was a factory; executed manually and cached (fallback path).`
       );
@@ -87,6 +116,63 @@ const resolveModule = (central, id) => {
     }
   }
   return mod;
+};
+
+/**
+ * 按特征扫描重新定位模块 (固定模块号失配时的兜底)。
+ *
+ * 两条路径:
+ *   1. 模块表扫描: 用 hints 过滤工厂源码, 命中后才执行。先过滤后执行是
+ *      刻意的 —— 执行模块有副作用 (如立即建立 WS 连接), 不能为了探测把
+ *      无关模块挨个跑一遍。
+ *   2. 模块缓存扫描: 应用已经执行过的模块, 其导出就躺在 central.c 里,
+ *      直接逐个验证即可, 不需要再执行任何东西。
+ *
+ * @param {(id: number) => any} central 模块加载器
+ * @param {string[]} hints 工厂源码中应同时出现的特征片段 (为空则跳过路径 1)
+ * @param {(mod: any) => boolean} verify 导出验证函数
+ * @returns {{ mod: any, id: any, how: string } | null} 命中结果
+ */
+const resolveByScan = (central, hints, verify) => {
+  const table = central && central.m;
+  if (table && typeof table === "object" && Array.isArray(hints) && hints.length > 0) {
+    for (const [id, factory] of Object.entries(table)) {
+      if (typeof factory !== "function") continue;
+      const src = String(factory);
+      if (!hints.every((hint) => src.includes(hint))) continue;
+      let candidate = null;
+      try {
+        candidate = resolveModule(central, Number(id));
+      } catch (err) {
+        continue;
+      }
+      if (candidate === null || candidate === undefined) continue;
+      let ok = false;
+      try {
+        ok = verify(candidate) === true;
+      } catch (err) {
+        ok = false;
+      }
+      if (ok) return { mod: candidate, id: Number(id), how: "module-table" };
+    }
+  }
+
+  const cache = central && central.c;
+  if (cache && typeof cache === "object") {
+    for (const entry of Object.values(cache)) {
+      const exported = entry && entry.exports;
+      if (exported === null || exported === undefined) continue;
+      let ok = false;
+      try {
+        ok = verify(exported) === true;
+      } catch (err) {
+        ok = false;
+      }
+      if (ok) return { mod: exported, id: entry.i, how: "module-cache" };
+    }
+  }
+
+  return null;
 };
 
 // >>> WS 拦截器共享蹦床 (Trampoline) <<< //
@@ -107,8 +193,70 @@ const WS_TRAMPOLINE_FLAG = "__auraWsTrampoline";
 const WS_INTERCEPTORS_FLAG = "__auraWsInterceptors";
 const WS_REFRESHED_FLAG = "__auraWsRefreshed";
 
-// 自检失败诊断: 每个 (模块, 入口) 只记录一次
+// 自检失败诊断: 每个 label 只记录一次
 const wsDiagLogged = {};
+
+// 扫描节流: 模块表动辄数百项, 逐项 String(factory) 开销不低, 而重试本身
+// 有 30 次。同一扫描入口 3 秒内只扫一次, 被节流跳过时等下一次重试即可。
+// (WS 蹦床定位与 handler 模块定位共用此工具)
+const SCAN_THROTTLE_MS = 3000;
+const lastScanAt = {};
+
+/**
+ * 判断某个扫描入口是否已过节流窗口 (供各钩子的重试循环共用)。
+ * @param {string} key 入口标识
+ * @returns {boolean} true=允许本次扫描
+ */
+const shouldScan = (key) => {
+  const now = Date.now();
+  if (lastScanAt[key] && now - lastScanAt[key] < SCAN_THROTTLE_MS) return false;
+  lastScanAt[key] = now;
+  return true;
+};
+
+/**
+ * 运行时自检: 是否为 WS 客户端 (WebSocketManager 派生实例)。
+ *
+ * onMessage 在基类构造器中被 bind, 必须取原型链上的未绑定方法做特征匹配;
+ * setHost/sendMessage 为基类方法, 用于确认 WS 客户端身份。
+ *
+ * @param {any} client 待判定对象
+ * @returns {boolean}
+ */
+const isWsClientInstance = (client) => {
+  if (!client) return false;
+  const unboundOnMessage = getPrototypeMethod(client, "onMessage");
+  return Boolean(
+    typeof client.onMessage === "function" &&
+      typeof client.setHost === "function" &&
+      typeof client.sendMessage === "function" &&
+      typeof unboundOnMessage === "function" &&
+      String(unboundOnMessage).includes("JSON.parse")
+  );
+};
+
+/**
+ * 组装自检失败诊断串 (供日志定位失配原因)。
+ */
+const describeWsFailure = (client, central, hints) => {
+  let protoOnMessage = "n/a";
+  try {
+    protoOnMessage = typeof getPrototypeMethod(client, "onMessage");
+  } catch (err) {
+    protoOnMessage = "threw";
+  }
+  return (
+    `typeof(client)=${typeof client}, ` +
+    `onMessage=${client && typeof client.onMessage}, ` +
+    `setHost=${client && typeof client.setHost}, ` +
+    `sendMessage=${client && typeof client.sendMessage}, ` +
+    `proto.onMessage=${protoOnMessage}, ` +
+    `moduleTable=${Boolean(central.m && central.c)}, ` +
+    `tableEntries=${central.m ? Object.keys(central.m).length : 0}, ` +
+    `cacheEntries=${central.c ? Object.keys(central.c).length : 0}, ` +
+    `hints=[${hints.join(",")}]`
+  );
+};
 
 /**
  * 向 WS 客户端安装共享拦截蹦床并注册处理函数。
@@ -119,39 +267,44 @@ const wsDiagLogged = {};
  *   - 其他               : 继续传递给下一个处理函数 / 原始 onMessage
  *
  * @param {(id: number) => any} central 模块加载器
- * @param {number} moduleId WS 客户端模块 ID
- * @param {string} label 入口名称 (日志标识)
+ * @param {number} moduleId WS 客户端模块 ID (构建相关, 失配时走扫描兜底)
+ * @param {string} label 入口名称 (日志标识; 同时作为默认扫描特征 ——
+ *        该名称即 WS 的配置键, 会出现在对应客户端模块的工厂源码里)
  * @param {(parsed: any, rawMsg: string) => true | { delay: number } | void} handler
+ * @param {{ factoryHints?: string[] }} [options] 额外选项
  * @returns {boolean} true=安装成功 / false=模块未就绪需重试
  */
-const installWsInterceptor = (central, moduleId, label, handler) => {
+const installWsInterceptor = (central, moduleId, label, handler, options = {}) => {
+  const hints =
+    Array.isArray(options.factoryHints) && options.factoryHints.length > 0
+      ? options.factoryHints
+      : [label];
   try {
-    const client = resolveModule(central, moduleId);
+    let client = null;
+    try {
+      client = resolveModule(central, moduleId);
+    } catch (err) {
+      client = null;
+    }
 
-    // 运行时自检: 是否为 WS 客户端 (WebSocketManager 派生实例)。
-    // onMessage 在基类构造器中被 bind, 必须取原型链上的未绑定方法做特征匹配;
-    // setHost/sendMessage 为基类方法, 用于确认 WS 客户端身份。
-    const unboundOnMessage = getPrototypeMethod(client, "onMessage");
-    const isWsClient =
-      client &&
-      typeof client.onMessage === "function" &&
-      typeof client.setHost === "function" &&
-      typeof client.sendMessage === "function" &&
-      typeof unboundOnMessage === "function" &&
-      String(unboundOnMessage).includes("JSON.parse");
+    // 模块号失配兜底: 按特征扫描重新定位 WS 客户端 (受节流约束)。
+    if (!isWsClientInstance(client) && shouldScan(`${label}:${moduleId}`)) {
+      const recovered = resolveByScan(central, hints, isWsClientInstance);
+      if (recovered) {
+        client = recovered.mod;
+        console.warn(
+          `[HugoAura / WsHook] ${label}: module ${moduleId} unavailable, ` +
+            `recovered via ${recovered.how} (module ${recovered.id}).`
+        );
+      }
+    }
 
-    if (!isWsClient) {
+    if (!isWsClientInstance(client)) {
       if (!wsDiagLogged[label]) {
         wsDiagLogged[label] = true;
-        const proto = Object.getPrototypeOf(client);
         console.warn(
           `[HugoAura / WsHook] ${label} (module ${moduleId}) self-check failed. ` +
-            `typeof(client)=${typeof client}, ` +
-            `onMessage=${client && typeof client.onMessage}, ` +
-            `setHost=${client && typeof client.setHost}, ` +
-            `sendMessage=${client && typeof client.sendMessage}, ` +
-            `proto.onMessage=${proto && typeof proto.onMessage}, ` +
-            `moduleTable=${!!(central.m && central.c)}`
+            describeWsFailure(client, central, hints)
         );
       }
       console.debug(
@@ -291,5 +444,8 @@ module.exports = {
   withRetry,
   getPrototypeMethod,
   resolveModule,
+  resolveByScan,
+  shouldScan,
+  looksLikeModuleFactory,
   installWsInterceptor,
 };
