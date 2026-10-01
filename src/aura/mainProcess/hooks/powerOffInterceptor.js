@@ -10,9 +10,8 @@
  *   对话框, 确认后执行 `shutdown -s -f -t 0`。
  *
  * 本钩子包装模块 128 的 onMessage:
- *   1. block 模式: 直接吞掉关机指令, 设备不会被远程关机。
- *   2. notify 模式: 延迟 10 秒放行指令, 弹窗提醒用户。
- *   3. 审计日志写入 cloudCommandAudit.log (复用云端指令审计通道)。
+ *   1. 直接吞掉关机指令, 设备不会被远程关机 (不提供"仅提醒"放行模式)。
+ *   2. 审计日志写入 cloudCommandAudit.log (复用云端指令审计通道)。
  *
  * 为什么包装模块 128 而不是 WS 客户端 (模块 390):
  *   分发器以 `r.onMessage(t)` 形式在**调用时**做属性查找, 因此替换模块 128
@@ -32,7 +31,13 @@
  * 仅打印诊断日志, 不干扰管家原有行为。
  */
 
-const { withRetry, getPrototypeMethod, resolveModule } = require("./retryHook");
+const {
+  withRetry,
+  getPrototypeMethod,
+  resolveModule,
+  resolveByScan,
+  shouldScan,
+} = require("./retryHook");
 const auditWriter = require("./auditWriter");
 const alertWindow = require("./alertWindow");
 
@@ -41,9 +46,6 @@ const POWER_OFF_RULES = ["/powerOff/confirm"];
 
 // 关机指令处理器模块号 (构建相关, 仅作快路径, 失败时回退源码特征扫描)
 const POWER_OFF_HANDLER_ID = 128;
-
-// notify 模式延迟放行时长
-const NOTIFY_DELAY_MS = 10000;
 
 const hookFn = (central) => {
   const electron = central(1);
@@ -94,9 +96,8 @@ const hookFn = (central) => {
     const cfg =
       config && config.auraSettings && config.auraSettings.powerOffIntercept;
     if (!cfg || !cfg.enabled) return null;
-    return {
-      mode: cfg.mode === "notify" ? "notify" : "block",
-    };
+    // 只有"阻止"一种行为: 开启即吞掉指令, 不再提供仅提醒的放行模式
+    return { enabled: true };
   };
 
   const isPowerOffUrl = (url) => {
@@ -141,21 +142,24 @@ const hookFn = (central) => {
     );
   };
 
-  // 定位关机指令处理器: 模块号是构建相关的快路径; 失败时遍历 webpack
-  // 模块表, 以"工厂源码含 /powerOff/confirm"定位 (该 URL 全包仅此一处)。
-  // 注意先用源码过滤再执行工厂, 避免为探测而触发无关模块的副作用。
+  // 定位关机指令处理器: 模块号 (128) 是构建相关的快路径; 失配时由
+  // resolveByScan 按"工厂源码含 /powerOff/confirm"(全包仅此一处) 扫
+  // 模块表 / 模块缓存兜底 —— 先源码过滤再执行工厂, 避免为探测触发无关
+  // 模块的副作用。
   const resolvePowerOffHandler = () => {
     const preferred = resolveModule(central, POWER_OFF_HANDLER_ID);
     if (isPowerOffHandler(preferred)) return preferred;
 
-    const table = central && central.m;
-    if (table && typeof table === "object") {
-      for (const [id, factory] of Object.entries(table)) {
-        if (typeof factory !== "function") continue;
-        if (!String(factory).includes("/powerOff/confirm")) continue;
-        const candidate = resolveModule(central, Number(id));
-        if (isPowerOffHandler(candidate)) return candidate;
-      }
+    // 扫描有开销 (模块表数百项), 同一入口 3 秒内只扫一次, 被节流时等下次重试
+    if (!shouldScan("powerOff")) return null;
+
+    const hit = resolveByScan(central, POWER_OFF_RULES, isPowerOffHandler);
+    if (hit) {
+      console.warn(
+        `[HugoAura / PowerOff] Module ${POWER_OFF_HANDLER_ID} unavailable, ` +
+          `recovered via ${hit.how} (module ${hit.id}).`
+      );
+      return hit.mod;
     }
     return null;
   };
@@ -203,7 +207,7 @@ const hookFn = (central) => {
           source,
           channel: "proxyWebsocketHost",
           url: parsed.url,
-          action: cfg.mode === "block" ? "blocked" : "captured",
+          action: "blocked",
           data: parsed && parsed.data !== undefined ? parsed.data : null,
           _logType: "powerOff",
         };
@@ -213,25 +217,10 @@ const hookFn = (central) => {
         // 兜底: 注入窗口全部不可见时弹独立置顶小窗, 否则提醒会静默丢失
         alertWindow.showAlertWindow(electron, record);
 
-        if (cfg.mode === "block") {
-          console.log(
-            `[HugoAura / PowerOff] Blocked remote power-off from ${source}`
-          );
-          return; // 吞掉指令, 设备不会被关机
-        }
-
-        // notify 模式: 延迟 10 秒后放行, 给用户保存工作的时间
         console.log(
-          `[HugoAura / PowerOff] Remote power-off detected, delaying ${NOTIFY_DELAY_MS}ms before dispatch (notify mode)`
+          `[HugoAura / PowerOff] Blocked remote power-off from ${source}`
         );
-        setTimeout(() => {
-          try {
-            originalOnMessage(e);
-          } catch (err) {
-            console.error("[HugoAura / PowerOff] Delayed dispatch error:", err);
-          }
-        }, NOTIFY_DELAY_MS);
-        return;
+        return; // 吞掉指令, 设备不会被关机
       }
 
       // 其余指令 (绑定 / 二维码 / 认证方式等) 原样透传

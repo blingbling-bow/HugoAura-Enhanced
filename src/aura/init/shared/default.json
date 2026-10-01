@@ -91,8 +91,7 @@
       "logPeekEvents": true
     },
     "powerOffIntercept": {
-      "enabled": false,
-      "mode": "block"
+      "enabled": false
     },
     "lockScreenIntercept": {
       "enabled": false,

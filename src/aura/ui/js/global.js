@@ -151,6 +151,7 @@
       const { action, source, ts, _logType } = data;
       const blocked = action === "blocked";
       const isLock = _logType === "lockScreen";
+      // 关机只有"阻止"一种结果 (不再提供仅提醒的放行模式), 锁屏仍有延迟放行
       const actionName = isLock ? "远程锁屏" : "远程关机";
       const time = new Date(ts).toLocaleTimeString("zh-CN");
       const color = blocked
@@ -176,14 +177,12 @@
       textWrap.style.cssText = "flex:1;";
 
       const title = document.createElement("p");
-      // 延迟秒数须与主进程保持一致: 锁屏见 lockScreenInterceptor 的 NOTIFY_DELAY_MS,
-      // 关机见 powerOffInterceptor 的 notify 分支
-      const delaySeconds = isLock ? 5 : 10;
+      // 延迟秒数须与主进程保持一致: 锁屏见 lockScreenInterceptor 的 NOTIFY_DELAY_MS;
+      // 关机 / 重启是立即阻止, 没有延迟放行
+      const delaySeconds = 5;
       title.textContent = blocked
         ? `已阻止${actionName}`
-        : isLock
-          ? `即将在 ${delaySeconds} 秒后锁屏`
-          : `检测到${actionName}, ${delaySeconds} 秒后执行`;
+        : `即将在 ${delaySeconds} 秒后锁屏`;
       title.style.cssText = `margin:0 0 2px;font-size:14px;font-weight:bold;color:${color.text};`;
 
       const meta = document.createElement("p");
@@ -209,7 +208,7 @@
 
       (document.body || document.documentElement).appendChild(powerOffAlertEl);
 
-      // 锁屏延迟 5 秒后即真正锁屏, 提示随之收起; 关机沿用 10 秒
+      // 锁屏延迟 5 秒后即真正锁屏, 提示随之收起; 关机已阻止, 提示停留 10 秒
       powerOffAutoHideTimer = setTimeout(hideAlert, isLock ? 5000 : 10000);
     };
 

@@ -14,8 +14,8 @@
  *     样式与 DOM 弹窗一致, 显示 duration 毫秒后自动销毁。
  *
  * 标题/时长逻辑与渲染层 (ui/js/global.js 的 showAlert) 保持同源:
- *   锁屏 5 秒 (lockScreenInterceptor.NOTIFY_DELAY_MS) / 关机 10 秒
- *   (powerOffInterceptor notify 分支的 delay), 改动时两处需同步。
+ *   锁屏 5 秒 (lockScreenInterceptor.NOTIFY_DELAY_MS, 延迟放行, 提示随之收起);
+ *   关机为立即阻止, 没有延迟, 提示停留 10 秒。改动时两处需同步。
  */
 
 const path = require("path");
@@ -98,12 +98,10 @@ const showAlertWindow = (electron, record) => {
     const actionName = isLock ? "远程锁屏" : "远程关机";
     const blocked = record.action === "blocked";
     // 延迟秒数须与渲染层弹窗 (ui/js/global.js showAlert) 保持一致
-    const delaySeconds = isLock ? 5 : 10;
+    const delaySeconds = 5;
     const title = blocked
       ? `已阻止${actionName}`
-      : isLock
-        ? `即将在 ${delaySeconds} 秒后锁屏`
-        : `检测到${actionName}, ${delaySeconds} 秒后执行`;
+      : `即将在 ${delaySeconds} 秒后锁屏`;
     const durationMs = isLock ? 5000 : 10000;
 
     closeAlertWindow();
