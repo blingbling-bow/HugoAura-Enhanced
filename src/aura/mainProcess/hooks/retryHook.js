@@ -75,6 +75,9 @@ const looksLikeModuleFactory = (fn) => {
   );
 };
 
+// 快路径失配提示去重: 每个模块号只提示一次 (重试上限 30 次, 否则刷屏)
+const missingModuleLogged = new Set();
+
 /**
  * 尝试获取模块的运行时导出 (带"工厂兜底")。
  *
@@ -86,10 +89,27 @@ const looksLikeModuleFactory = (fn) => {
  *
  * @param {(id: number) => any} central 模块加载器
  * @param {number} id 模块 ID
- * @returns {any} 模块导出 (可能是实例)
+ * @returns {any} 模块导出 (可能是实例); 模块号不存在时返回 undefined
  */
 const resolveModule = (central, id) => {
-  let mod = central(id);
+  let mod;
+  try {
+    mod = central(id);
+  } catch (err) {
+    // 模块号漂移时, webpack 对未知 ID 抛 MODULE_NOT_FOUND。这里必须吞掉:
+    // 调用方 (各钩子的 tryInstall) 把"拿不到正确模块"当作可重试的软失败,
+    // 异常一旦穿透, 后面的特征扫描兜底永远跑不到, 最终 30 次重试后
+    // "Gave up" —— 正是本模块要消除的失效模式。
+    if (!missingModuleLogged.has(id)) {
+      missingModuleLogged.add(id);
+      console.warn(
+        `[HugoAura / Retry] Module ${id} not found (${
+          err && err.message ? err.message : err
+        }); fast path miss, scan fallback will be used.`
+      );
+    }
+    return undefined;
+  }
   // 判定"返回值是否为未执行的工厂函数":
   //   - 首选模块表比对 (最准确)
   //   - 无模块表时退化为函数签名判断
@@ -112,7 +132,12 @@ const resolveModule = (central, id) => {
         `[HugoAura / Retry] Failed to execute module ${id} factory:`,
         err
       );
-      mod = central(id); // 还原原始返回, 下次重试再试
+      // 还原原始返回 (下次重试再试); 若 central 仍然抛错, 视为未就绪
+      try {
+        mod = central(id);
+      } catch (err2) {
+        mod = undefined;
+      }
     }
   }
   return mod;
