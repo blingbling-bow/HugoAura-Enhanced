@@ -5,194 +5,198 @@
  *
  * 目标: 集控下发的「倒计日」卡片 —— 窗口名 "countdown", 由 public/countdown.js
  * 渲染, 界面文案为标题「倒计日」+「距离<事件>仅有 N 天」。它不是按秒的倒计时,
- * 而是按天递减的倒计日, 由云端通过 messageType 1004 下发。
+ * 而是按天递减的倒计日, 由云端通过 messageType 1004 下发, 窗口管理器
+ * (模块 3) newOne("countdown") 创建。它是槽位卡片 (yIndex 3)。
  *
- * 原理: 倒计日由独立窗口 ("countdown") 承载,
- * 消息处理器 (模块 132, 单例) 监听 WS 消息:
- *   messageType === 1004 (GET_COUNTDOWN_MES):
- *     - e.data.vaildType === 1 -> 创建/刷新 countdown 窗口
- *     - 否则                   -> 关闭 countdown 窗口
+ * 原先只在「收到 1004」和「开关 refresh」时 close() 窗口。卡片往往在钩子
+ * 装上之前就已经 newOne 出来, 启动时那一次 close 对空窗口是空操作; 之后没有
+ * 新的配置刷新, 开关虽然是开的, 卡片却一直留在屏上, 必须再拨一次开关才会收掉。
  *
- * 本钩子的行为 (只隐藏, 不吞指令):
- *   1. 指令照常交给原生处理器 —— 原生状态 (message / getCountdownMessage 等)
- *      与数据完整保留, 不做任何"拦截丢弃"。
- *   2. 开关启用时, 在原生处理完之后立刻收掉卡片窗口, 屏上不显示。
- *   3. 开关由开变关时, 若云端最后一次下发的是"显示"(vaildType === 1), 立即按原生
- *      流程把卡片补回来 —— 隐藏可逆, 不会出现"隐藏过就再也打不开"。
- *
- * 其他消息类型完全不介入, 不影响 bellRinging 等其他组件。
- * 版本容错: 自检失败时优雅降级, 仅打印诊断日志。
+ * 现在改为: 包住 newOne, 在 BrowserWindow 创建、onFinished 调用 show() 之前
+ * 就装上槽位隐藏。开关原本就是开的也会立刻 hide + 释放槽位, 不必再拨开关。
+ * 之后原生再次 show() 也会被槽位工具收回。关掉开关则恢复显示和槽位。
  */
 
-const { withRetry, getPrototypeMethod, resolveModule } = require("./retryHook");
+const { withRetry, resolveModule } = require("./retryHook");
+const { createSlotCardHider, readConfigPath } = require("./slotCardHider");
 
-const COUNTDOWN_MESSAGE_TYPE = 1004; // GET_COUNTDOWN_MES
-const VALID_TYPE_SHOW = 1; // vaildType === 1 表示云端要求显示卡片
+const WINDOW_MANAGER_ID = 3;
+const WINDOW_NAME = "countdown";
+const WRAPPED_FLAG = "__auraHideCountdownWrapped";
 
+/**
+ * 倒计日页面地址。file URL 可能带 query。
+ *
+ * @param {string | null | undefined} url
+ * @returns {boolean}
+ */
+const isCountdownUrl = (url) => {
+  return (
+    typeof url === "string" &&
+    /(?:^|[\\/])countdown\.html(?:[?#]|$)/i.test(url)
+  );
+};
+
+const isHideEnabled = () => {
+  return Boolean(
+    readConfigPath("networkRewrite.appearance/hideCountdown.enabled")
+  );
+};
+
+/**
+ * @param {(id: number) => any} central
+ */
 const hookFn = (central) => {
-  let diagLogged = false;
+  /** @type {WeakSet<object>} */
+  const attached = new WeakSet();
+  let creatingCountdown = false;
+  let watching = false;
 
-  // 安装成功后的处理器与原生方法引用 (还原卡片时复用)
-  let installed = null;
-  // 云端最后一次下发的倒计日指令, 用于判断"现在是否应该显示卡片"
-  let lastCommand = null;
-  // 当前是否处于"被本钩子隐藏"的状态: 仅开 -> 关的切换需要还原
-  let hiding = false;
-
-  const readConfig = () => {
+  /**
+   * @param {import("electron").BrowserWindow | null | undefined} browserWindow
+   */
+  const attach = (browserWindow) => {
+    if (!browserWindow || attached.has(browserWindow)) return;
     try {
-      const mgr = global.__HUGO_AURA_CONFIG_MGR__;
-      if (!mgr) return null;
-      return mgr.loadConfig();
-    } catch (err) {
-      console.error(
-        "[HugoAura / HideCountdown / Error] Failed to read config:",
-        err
-      );
-      return null;
-    }
-  };
-
-  const shouldHide = () => {
-    const config = readConfig();
-    return Boolean(
-      config &&
-        config.networkRewrite &&
-        config.networkRewrite["appearance/hideCountdown"] &&
-        config.networkRewrite["appearance/hideCountdown"].enabled
-    );
-  };
-
-  /** 主动关闭已存在的 countdown 窗口 (模块 3 为窗口管理器) */
-  const closeCountdownWindow = () => {
-    try {
-      const windowMgr = resolveModule(central, 3);
       if (
-        windowMgr &&
-        typeof windowMgr.checkWindowExist === "function" &&
-        typeof windowMgr.close === "function" &&
-        windowMgr.checkWindowExist("countdown")
+        typeof browserWindow.isDestroyed === "function" &&
+        browserWindow.isDestroyed()
       ) {
-        windowMgr.close("countdown");
-        console.debug("[HugoAura / HideCountdown] Closed countdown window.");
+        return;
       }
     } catch (err) {
-      console.warn(
-        "[HugoAura / HideCountdown] Failed to close countdown window:",
-        err
-      );
-    }
-  };
-
-  /** 开关由开变关: 云端若要求显示卡片, 就按原生流程把它补回来 */
-  const restoreCountdown = () => {
-    if (!installed || !lastCommand || !lastCommand.wantsShow) return;
-    try {
-      installed.originalOnMessage({
-        messageType: COUNTDOWN_MESSAGE_TYPE,
-        data: lastCommand.data,
-      });
-      console.log(
-        "[HugoAura / HideCountdown] Restored countdown-day card (hide disabled)."
-      );
-    } catch (err) {
-      console.warn("[HugoAura / HideCountdown] Failed to restore card:", err);
-    }
-  };
-
-  // 配置变更: 打开则收掉卡片, 关闭则还原该显示的卡片
-  const onConfigRefresh = () => {
-    if (shouldHide()) {
-      hiding = true;
-      closeCountdownWindow();
       return;
     }
-    if (!hiding) return;
-    hiding = false;
-    restoreCountdown();
+    attached.add(browserWindow);
+    createSlotCardHider({
+      central,
+      browserWindow,
+      windowName: WINDOW_NAME,
+      label: "HideCountdown",
+      isEnabled: isHideEnabled,
+    });
   };
 
-  // 单次安装尝试: 成功返回 true, 模块未就绪返回 false (触发重试)
-  const tryInstall = () => {
-    const handler = resolveModule(central, 132);
-
-    // 运行时自检: 确认模块 132 是倒计日消息处理器 (版本容错)
-    const unboundOnMessage = getPrototypeMethod(handler, "onMessage");
-    const isCountdownHandler =
-      handler &&
-      typeof handler.onMessage === "function" &&
-      typeof unboundOnMessage === "function" &&
-      String(unboundOnMessage).includes("GET_COUNTDOWN_MES");
-
-    if (!isCountdownHandler) {
-      if (!diagLogged) {
-        diagLogged = true;
-        console.warn(
-          `[HugoAura / HideCountdown] Module 132 self-check failed. ` +
-            `typeof(handler)=${typeof handler}, ` +
-            `onMessage=${handler && typeof handler.onMessage}`
-        );
+  /**
+   * newOne 期间用创建标记识别; 其余路径 (钩子安装前已存在的窗口) 用页面地址。
+   *
+   * @param {import("electron").BrowserWindow | null | undefined} browserWindow
+   */
+  const consider = (browserWindow) => {
+    if (creatingCountdown) {
+      attach(browserWindow);
+      return;
+    }
+    try {
+      if (!browserWindow || typeof browserWindow.isDestroyed !== "function") {
+        return;
       }
+      if (browserWindow.isDestroyed()) return;
+      const wc = browserWindow.webContents;
+      if (!wc || typeof wc.getURL !== "function") return;
+
+      const check = () => {
+        try {
+          if (browserWindow.isDestroyed()) return;
+          if (isCountdownUrl(wc.getURL())) attach(browserWindow);
+        } catch (err) {
+          console.warn(
+            "[HugoAura / HideCountdown] Failed to inspect window URL:",
+            err
+          );
+        }
+      };
+
+      check();
+      if (!attached.has(browserWindow) && typeof wc.on === "function") {
+        const onLoad = () => {
+          check();
+          if (
+            attached.has(browserWindow) &&
+            typeof wc.removeListener === "function"
+          ) {
+            wc.removeListener("did-start-loading", onLoad);
+            wc.removeListener("did-finish-load", onLoad);
+          }
+        };
+        wc.on("did-start-loading", onLoad);
+        wc.on("did-finish-load", onLoad);
+      }
+    } catch (err) {
+      console.warn("[HugoAura / HideCountdown] Failed to watch window:", err);
+    }
+  };
+
+  const watchWindows = () => {
+    if (watching) return;
+    try {
+      const electron = central(1);
+      const BrowserWindow = electron && electron.BrowserWindow;
+      if (BrowserWindow && typeof BrowserWindow.getAllWindows === "function") {
+        for (const win of BrowserWindow.getAllWindows()) consider(win);
+      }
+      const app = electron && electron.app;
+      if (!app || typeof app.on !== "function") return;
+      watching = true;
+      app.on("browser-window-created", (_event, browserWindow) => {
+        consider(browserWindow);
+      });
+    } catch (err) {
+      console.warn(
+        "[HugoAura / HideCountdown] Failed to watch new windows:",
+        err
+      );
+    }
+  };
+
+  const tryInstall = () => {
+    watchWindows();
+
+    const windowMgr = resolveModule(central, WINDOW_MANAGER_ID);
+    const ready =
+      windowMgr &&
+      typeof windowMgr.newOne === "function" &&
+      typeof windowMgr.checkWindowExist === "function" &&
+      typeof windowMgr.getInstance === "function";
+    if (!ready) {
       console.debug(
-        "[HugoAura / HideCountdown] Module 132 not ready, retrying..."
+        "[HugoAura / HideCountdown] Window manager (module 3) not ready, retrying..."
       );
       return false;
     }
 
-    const originalOnMessage = handler.onMessage.bind(handler);
-    handler.onMessage = (e) => {
-      if (!e || e.messageType !== COUNTDOWN_MESSAGE_TYPE) {
-        // 其他消息完全不介入
-        originalOnMessage(e);
-        return;
-      }
-
-      // 记录云端意图 (1 = 显示, 其他 = 关闭), 供开关关闭时还原
-      lastCommand = {
-        data: e.data,
-        wantsShow: Boolean(e.data && e.data.vaildType === VALID_TYPE_SHOW),
+    if (!windowMgr[WRAPPED_FLAG]) {
+      const originalNewOne = windowMgr.newOne.bind(windowMgr);
+      windowMgr.newOne = (name, ...args) => {
+        const mark = name === WINDOW_NAME;
+        if (mark) creatingCountdown = true;
+        try {
+          const win = originalNewOne(name, ...args);
+          if (mark) attach(win);
+          return win;
+        } finally {
+          if (mark) creatingCountdown = false;
+        }
       };
+      windowMgr[WRAPPED_FLAG] = true;
+      console.log("[HugoAura / HideCountdown] Wrapped window manager newOne.");
+    }
 
-      // 指令不吞: 原生照常处理, 状态 / 数据 / 窗口创建全部保留
-      originalOnMessage(e);
-
-      // 开关启用时再把卡片收掉: 窗口刚被同步创建出来, 同一个 tick 内销毁
-      if (shouldHide()) {
-        hiding = true;
-        closeCountdownWindow();
-        console.log(
-          "[HugoAura / HideCountdown] Hid countdown-day card (messageType 1004)."
-        );
+    try {
+      if (windowMgr.checkWindowExist(WINDOW_NAME)) {
+        attach(windowMgr.getInstance(WINDOW_NAME));
       }
-    };
+    } catch (err) {
+      console.warn(
+        "[HugoAura / HideCountdown] Failed to hide existing countdown window:",
+        err
+      );
+    }
 
-    installed = { handler, originalOnMessage };
-
-    console.log(
-      "[HugoAura / HideCountdown] Source interception installed (module 132)."
-    );
     return true;
   };
 
-  // 懒加载容错: 模块未就绪时延迟重试
   withRetry(tryInstall, { label: "HideCountdown" })();
-
-  try {
-    const eventBus = global.__HUGO_AURA_EVENT_BUS__;
-    if (eventBus && typeof eventBus.on === "function") {
-      eventBus.on("$aura.config.refreshConfig", onConfigRefresh);
-    }
-    // 启动时开关就是打开的: 先进入隐藏态, 并收掉可能已在屏上的卡片
-    if (shouldHide()) {
-      hiding = true;
-      closeCountdownWindow();
-    }
-  } catch (err) {
-    console.warn(
-      "[HugoAura / HideCountdown] Failed to register config listener:",
-      err
-    );
-  }
 };
 
-module.exports = { hookFunc: hookFn };
+module.exports = { hookFunc: hookFn, isCountdownUrl };
