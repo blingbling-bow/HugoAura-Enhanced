@@ -203,17 +203,15 @@ global.__HUGO_AURA_UI_FUNCTIONS__.config = {
       return false;
     }
 
-    const crypto = require("crypto");
-    const encPasswd = crypto
-      .createHash("sha512")
-      .update(userPasswdInput + "EndlessX")
-      .digest("hex")
-      .toUpperCase();
+    const { verifyPassword, hashPassword } = require("../../../utils/passwordHash");
+    const stored = global.__HUGO_AURA_CONFIG__.auraSettings.settingsPasswordWithSalt;
+    const result = verifyPassword(userPasswdInput, stored);
 
-    if (
-      encPasswd ===
-      global.__HUGO_AURA_CONFIG__.auraSettings.settingsPasswordWithSalt
-    ) {
+    if (result.valid) {
+      if (result.needsUpgrade) {
+        global.__HUGO_AURA_CONFIG__.auraSettings.settingsPasswordWithSalt =
+          hashPassword(userPasswdInput);
+      }
       await global.__HUGO_AURA_UI_FUNCTIONS__.config.hideAndResetAuthDialog();
       await global.__HUGO_AURA_GLOBAL__.utils.sleep(250);
       global.__HUGO_AURA_UI_REACTIVES__.config.authenticated = true;

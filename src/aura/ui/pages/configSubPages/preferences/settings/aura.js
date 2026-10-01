@@ -119,18 +119,16 @@ const functions = {
         return;
       }
 
-      const crypto = require("crypto");
-      const encPasswd = crypto
-        .createHash("sha512")
-        .update(userPasswdInput + "EndlessX")
-        .digest("hex")
-        .toUpperCase();
+      const { verifyPassword, hashPassword } = require("../../../../../utils/passwordHash");
+      const result = verifyPassword(userPasswdInput, password);
 
-      if (encPasswd === password) {
+      if (result.valid) {
         await global.__HUGO_AURA_UI_FUNCTIONS__.config.hideAndResetAuthDialog();
 
-        global.__HUGO_AURA_CONFIG__.auraSettings.settingsPasswordWithSalt =
-          password;
+        if (result.needsUpgrade) {
+          global.__HUGO_AURA_CONFIG__.auraSettings.settingsPasswordWithSalt =
+            hashPassword(userPasswdInput);
+        }
         if (global.__HUGO_AURA_CONFIG__.auraSettings.encryptConfig) {
           functions.handleEnableConfigEncryption("update", password);
         }
@@ -286,7 +284,7 @@ const auraSettings = [
         restart: false,
         reload: false,
         tip: true,
-        tipTitle: "密码将在本地使用 SHA512 加盐存储",
+        tipTitle: "密码将在本地使用 PBKDF2 加盐存储",
         associateVal: null,
         auraIf: () => true,
         defaultValue: "",
@@ -314,12 +312,8 @@ const auraSettings = [
             };
           }
 
-          const crypto = require("crypto");
-          const result = crypto
-            .createHash("sha512")
-            .update(newVal + "EndlessX")
-            .digest("hex")
-            .toUpperCase();
+          const { hashPassword } = require("../../../../../utils/passwordHash");
+          const result = hashPassword(newVal);
 
           const promptResult = await functions.handle2ndPasswordPrompt(result);
 

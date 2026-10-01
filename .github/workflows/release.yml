@@ -6,7 +6,8 @@ on:
     tags:
       - "v*"
 
-permissions: write-all
+permissions:
+  contents: write
 
 jobs:
   release:
