@@ -198,3 +198,114 @@ test("安装时清掉钩子生效前已共享出去的『有更新』状态", ()
   assert.equal(last.value.status, 0);
   assert.equal(bus.shareData._default.UPGRADE_STATUS.status, 0);
 });
+
+/**
+ * 造一个"DataBus 尚未就绪"的 central: 处理器 (394) 可用, 但模块 2 抛错。
+ * 用于验证两层懒加载时机不同时的重试行为。
+ */
+const makeCentralWithLateDataBus = (bus, handler) => {
+  const base = makeCentral(bus, handler);
+  let dataBusAvailable = false;
+  const central = (id) => {
+    if (id === 2 && !dataBusAvailable) {
+      const err = new Error("Cannot find module '2'");
+      // @ts-ignore 与 webpack 一致
+      err.code = "MODULE_NOT_FOUND";
+      throw err;
+    }
+    return base(id);
+  };
+  central.m = base.m;
+  central.c = base.c;
+  return {
+    central,
+    releaseDataBus: () => {
+      dataBusAvailable = true;
+    },
+  };
+};
+
+/** 捕获 withRetry 排下的重试回调 (它用 setTimeout), 由测试手动驱动 */
+const captureRetries = (run) => {
+  const originalSetTimeout = global.setTimeout;
+  const pending = [];
+  // @ts-ignore
+  global.setTimeout = (fn) => {
+    pending.push(fn);
+    return { unref() {} };
+  };
+  try {
+    run();
+  } finally {
+    global.setTimeout = originalSetTimeout;
+  }
+  return pending;
+};
+
+test("回归: DataBus 未就绪时不得提前结束重试, 重试后必须补装兜底", () => {
+  const { bus, published } = makeFakeDataBus();
+  const handler = new FakeUpgradeHandler();
+  setConfig({ disableUpdate: true });
+
+  const { central, releaseDataBus } = makeCentralWithLateDataBus(bus, handler);
+  const pending = captureRetries(() => disableUpdate.hookFunc(central));
+
+  // 处理器层已成功, 但 DataBus 层没成功 -> 整体不得判定为安装完成
+  assert.equal(
+    pending.length,
+    1,
+    "DataBus 未就绪时必须安排重试 (否则兜底永远不会补装)"
+  );
+
+  // 第二次尝试: DataBus 已就绪
+  releaseDataBus();
+  pending[0]();
+
+  // 兜底必须已补装并生效
+  bus.share("UPGRADE_STATUS", { ...UPGRADE_PAYLOAD });
+  assert.equal(
+    published[published.length - 1].value.status,
+    0,
+    "重试后 DataBus 兜底必须补装成功"
+  );
+
+  // 两层都就绪后不应再排新的重试
+  assert.equal(pending.length, 1);
+});
+
+test("幂等: 重试不会把 onMessage 层层包裹", () => {
+  const { bus } = makeFakeDataBus();
+  const handler = new FakeUpgradeHandler();
+  setConfig({ disableUpdate: true });
+
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (...args) => logs.push(args.join(" "));
+
+  try {
+    const { central, releaseDataBus } = makeCentralWithLateDataBus(bus, handler);
+    const pending = captureRetries(() => disableUpdate.hookFunc(central));
+
+    const wrappedOnce = handler.onMessage;
+    assert.equal(pending.length, 1);
+
+    releaseDataBus();
+    pending[0]();
+
+    assert.equal(
+      handler.onMessage,
+      wrappedOnce,
+      "重试不得重新包裹 onMessage (否则每层重复判断、日志重复)"
+    );
+    const installedLogs = logs.filter((l) =>
+      l.includes("Source interception installed (module 394)")
+    );
+    assert.equal(installedLogs.length, 1, "安装日志只应出现一次");
+
+    // 包裹仍然只有一层: 升级消息依然被吞掉
+    handler.onMessage({ url: "/serviceUpgrade/status", data: {} });
+    assert.deepEqual(handler.calls, []);
+  } finally {
+    console.log = originalLog;
+  }
+});

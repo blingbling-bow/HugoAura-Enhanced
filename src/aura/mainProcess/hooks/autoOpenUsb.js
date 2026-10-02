@@ -135,7 +135,9 @@ const hookFn = (central) => {
   const openInExplorer = (rawPath) => {
     const drivePath = normalizeDiskPath(rawPath);
 
-    if (!/^(?:[A-Za-z]:\\|\\\\[^\\])/.test(drivePath)) {
+    // 该功能只应打开本地 U 盘根目录。拒绝 UNC/网络共享路径，避免云端
+    // 下发异常路径时触发 SMB 连接或访问外部网络位置。
+    if (!/^[A-Za-z]:\\$/.test(drivePath)) {
       console.warn(
         `[HugoAura / AutoOpenUsb] Skip non-absolute path: "${rawPath}"`
       );

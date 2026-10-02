@@ -88,7 +88,9 @@
     },
     "screenPeekDetector": {
       "enabled": false,
-      "logPeekEvents": true
+      "logPeekEvents": true,
+      "processNames": ["screenCapture.exe"],
+      "pollIntervalMs": 2000
     },
     "powerOffIntercept": {
       "enabled": false

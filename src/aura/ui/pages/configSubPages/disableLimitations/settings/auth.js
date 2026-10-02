@@ -606,12 +606,12 @@ const authSettings = [
         type: "switch",
         name: "启用窥屏提醒",
         description:
-          "当集控端发起远程查看屏幕 (直播) 时, 实时弹窗提醒。注意: 仅提醒, 无法阻止实际采集 (采集由独立进程完成)。审计日志写入 logs/screenPeekAudit.log",
+          "当系统里出现窥屏进程 (默认 screenCapture.exe, 即有人正在远程查看屏幕) 时, 实时弹窗提醒并记录。注意: 仅提醒, 无法阻止实际采集 (采集由独立进程完成)。审计日志写入 logs/screenPeekAudit.log",
         restart: false,
         reload: false,
         tip: true,
         tipTitle:
-          "监测点: 模块 399/390 两条 WS 连接的 /liveclient 指令。启用后, 收到直播开始指令时在屏幕右上角弹窗提醒",
+          "主信号: 周期比对系统进程列表, 出现 screenCapture.exe 即判定窥屏开始 (管家全包不引用该进程, 进程内没有任何窥屏信号, 只能从系统层面检测); 辅助信号: 模块 399/390 的 /liveclient 指令。进程名与轮询间隔可在配置里调整",
         associateVal: null,
         auraIf: () => true,
         defaultValue: false,

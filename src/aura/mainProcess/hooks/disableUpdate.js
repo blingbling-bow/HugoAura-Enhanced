@@ -75,6 +75,7 @@ const hookFn = (central) => {
   let diagLogged = false;
   let busDiagLogged = false;
   let dataBusGuardInstalled = false;
+  let handlerHookInstalled = false;
 
   const readConfig = () => {
     try {
@@ -203,6 +204,10 @@ const hookFn = (central) => {
 
   // 第 1 层: 处理器级拦截
   const installHandlerHook = () => {
+    // 幂等保护: DataBus 未就绪时重试会继续走到这里, 不加保护会把 onMessage
+    // 层层包裹 (每层重复判断一遍, 日志也会重复打印)
+    if (handlerHookInstalled) return true;
+
     // 先取模块导出; 若 central 返回的是未执行工厂, resolveModule 会兜底执行
     let messageHandler = resolveModule(central, 394);
 
@@ -263,14 +268,19 @@ const hookFn = (central) => {
       originalOnMessage(e);
     };
 
+    handlerHookInstalled = true;
     console.log("[HugoAura / DisableUpdate] Source interception installed (module 394).");
     return true;
   };
 
   // 单次安装尝试: 两层都成功才返回 true; 数据总线兜底独立于模块 394
   const tryInstall = () => {
-    if (!dataBusGuardInstalled) installDataBusGuard();
-    return installHandlerHook();
+    // DataBus 与升级处理器可能分别懒加载。不能只看处理器层是否成功，
+    // 否则处理器先就绪时 withRetry 会提前结束，DataBus 后续永远不会补装。
+    const dataBusReady =
+      dataBusGuardInstalled || installDataBusGuard();
+    const handlerReady = installHandlerHook();
+    return dataBusReady && handlerReady;
   };
 
   // 懒加载容错: 模块未就绪时延迟重试
