@@ -544,12 +544,12 @@ const authSettings = [
         type: "switch",
         name: "禁止管家更新",
         description:
-          "拦截集控下发的升级状态与升级触发请求, 希沃管家将不会升级到新版本",
+          "拦截集控下发的升级状态与升级触发请求, 并压制前端的「有新版本」状态, 希沃管家将不会升级到新版本",
         restart: false,
         reload: false,
         tip: true,
         tipTitle:
-          "同时拦截: 1) 集控下发的升级状态/反馈消息 (前端不显示升级入口与进度) 2) 前端升级触发请求 upgradeLastVersion (网络层兜底)",
+          "三层拦截: 1) 集控下发的升级状态/反馈消息 (模块 394 处理器级) 2) 数据总线层状态压制 —— 即使消息漏过, 也会把 UPGRADE_STATUS 改写成「已是最新」, 前端不会再显示升级入口 3) 前端升级触发请求 upgradeLastVersion (网络层兜底)",
         warning: true,
         warningContent:
           "管家版本将停留在当前版本, 请确认该版本满足学校集控对管家最低版本的要求",
