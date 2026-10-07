@@ -184,3 +184,20 @@ jobs:
             --notes-file "$GITHUB_WORKSPACE/rel_msg.txt" \
             --repo ${{ github.repository }} \
             --latest
+
+      # 用 GITHUB_TOKEN 创建的 Release 不会再触发其它 workflow (GitHub 防递归),
+      # 因此 trigger-install-upd.yml 的 release:published 收不到事件 —— v0.3.1
+      # 就没有通知到 installer 仓库。这里用 PAT 显式补一次 repository dispatch。
+      - name: Notify installer repo
+        env:
+          INSTALL_PAT: ${{ secrets.AURA_INSTALL_REPO_PAT }}
+        run: |
+          if [ -z "$INSTALL_PAT" ]; then
+            echo "::warning::未配置 AURA_INSTALL_REPO_PAT, 跳过 installer 通知"
+            exit 0
+          fi
+          curl -sS -o /dev/null -w "HTTP %{http_code}\n" -X POST \
+            -H "Authorization: Bearer ${INSTALL_PAT}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/blingbling-bow/HugoAura-Enhanced-Install/dispatches" \
+            -d "{\"event_type\":\"hugoaura_rel\",\"client_payload\":{\"tag_name\":\"${TAG_NAME}\",\"release_name\":\"[Rel]${TAG_NAME}\",\"release_url\":\"https://github.com/${{ github.repository }}/releases/tag/${TAG_NAME}\",\"repository\":\"${{ github.repository }}\"}}"
