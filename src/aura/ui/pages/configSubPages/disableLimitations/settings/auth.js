@@ -191,7 +191,14 @@ const authSettings = [
         reload: false,
         warning: true,
         warningContent: "本功能存在极大的被发现风险, 启用前请自估风险",
-        associateVal: ["rewrite.vendor/screenLock.fastfail"],
+        // 关联路径必须同时登记 enabled 与 fastfail:
+        // auraIf 依赖 enabled 决定显隐, 若只登记自己的 fastfail,
+        // 关闭「启用屏幕锁覆写功能」后再开启本项, auraIf 会按过期的
+        // enabled=false 把这一行隐藏, 且重新打开覆写也不会再判定 (Issue #8)
+        associateVal: [
+          "rewrite.vendor/screenLock.enabled",
+          "rewrite.vendor/screenLock.fastfail",
+        ],
         auraIf: () => {
           return global.__HUGO_AURA_CONFIG__.rewrite["vendor/screenLock"]
             .enabled;
@@ -426,6 +433,39 @@ const authSettings = [
     ],
   },
   {
+    id: 8,
+    categoryName: "开机锁屏",
+    child: [
+      {
+        index: 0,
+        id: "preventBootLockScreen",
+        type: "switch",
+        name: "禁止开机自动锁屏",
+        description:
+          "部分学校会设置开机即自动锁屏。启用后, 程序启动后一段时间内 (默认 90 秒, 可在配置文件 auraSettings.preventBootLock.graceSeconds 调整) 到达的锁屏指令会被拦截并代为上报锁屏回执, 集控端仍显示已锁屏; 窗口期结束后锁屏功能照常可用",
+        restart: false,
+        reload: false,
+        tip: true,
+        tipTitle:
+          "判定依据: 系统开机时长。锁屏指令到达时若开机未超过窗口期, 拦截指令并伪造锁屏回执; 若回执通道不可用则放行真实锁屏 (与集控端保持一致)。窗口期内本地与云端的锁屏都会被拦, 之后完全不影响",
+        associateVal: ["auraSettings.preventBootLock.enabled"],
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return (
+            global.__HUGO_AURA_CONFIG__.auraSettings.preventBootLock.enabled ===
+            true
+          );
+        },
+        callbackFn: (newVal) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.auraSettings.preventBootLock.enabled =
+            newVal;
+        },
+      },
+    ],
+  },
+  {
     id: 2,
     categoryName: "基础设施",
     child: [
@@ -612,17 +652,36 @@ const authSettings = [
         tip: true,
         tipTitle:
           "主信号: 周期比对系统进程列表, 出现 screenCapture.exe 即判定窥屏开始 (管家全包不引用该进程, 进程内没有任何窥屏信号, 只能从系统层面检测); 辅助信号: 模块 399/390 的 /liveclient 指令。进程名与轮询间隔可在配置里调整",
-        associateVal: null,
+        /*
+         * 该功能当前版本停用 (用户实测: 窥屏时系统里并不会出现
+         * screenCapture.exe 这类进程, 轮询检测不出来)。
+         * - 关闭状态: 永久置灰, 不可再开启;
+         * - 已开启的存量配置: 保留交互, 允许关掉。
+         */
+        associateVal: ["auraSettings.screenPeekDetector.enabled"],
         auraIf: () => true,
+        auraDisable: () => {
+          const enabled =
+            global.__HUGO_AURA_CONFIG__.auraSettings.screenPeekDetector
+              .enabled === true;
+          return {
+            value: !enabled,
+            tooltip: enabled
+              ? "该功能的检测方式在部分环境无法识别窥屏, 建议关闭"
+              : "该功能在当前版本不可用: 检测方式无法可靠识别窥屏进程",
+          };
+        },
         defaultValue: false,
         valueGetter: () => {
           return global.__HUGO_AURA_CONFIG__.auraSettings.screenPeekDetector
-            .enabled;
+            .enabled === true;
         },
         callbackFn: (newVal) => {
           if (typeof newVal !== "boolean") return;
+          // 保险: 只允许关, 不允许程序路径把开关重新打开
+          if (newVal !== false) return;
           global.__HUGO_AURA_CONFIG__.auraSettings.screenPeekDetector.enabled =
-            newVal;
+            false;
         },
       },
     ],

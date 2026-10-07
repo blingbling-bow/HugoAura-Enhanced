@@ -173,39 +173,68 @@ const main = () => {
     .map((e, i) => ui.rowHtml(e, `preview|${i}`))
     .join("");
 
-  // 第 6 个参数传 "modal" 时, 额外渲染一份"弹窗打开"的状态, 便于截图评审
+  // 第 6 个参数: "modal" = 渲染弹窗打开的状态; "about" = 渲染关于子页
+  const mode = process.argv[6] || "audit";
   const modal =
-    entries[1] && process.argv[6] === "modal" ? ui.detailModalHtml(entries[1]) : "";
+    mode === "modal" && entries[1] ? ui.detailModalHtml(entries[1]) : "";
 
-  const channels = Array.from(
-    new Set(entries.map((e) => e.channel || e._logType).filter(Boolean))
-  ).sort();
+  let page;
+  if (mode === "about") {
+    // 关于子页: 需要 window.process 提供版本号 (真实环境由 Electron 注入)
+    global.window = {
+      process: { versions: { node: "20.18.3", electron: "31.3.0" } },
+    };
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(root, "package.json"), "utf8")
+    );
+    global.__HUGO_AURA__ = { version: pkg.version || "dev" };
+    const about = require(
+      "../src/aura/ui/pages/configSubPages/preferences/settings/about.js"
+    );
+    page = about.aboutContent;
+  } else {
+    const channels = Array.from(
+      new Set(entries.map((e) => e.channel || e._logType).filter(Boolean))
+    ).sort();
 
-  const page = ui
-    .auditPageTemplate()
-    .replace(
-      '<select id="auditChannelFilter" class="aura-audit-select" title="按通道筛选">\n            <option value="all">全部通道</option>\n          </select>',
-      `<select id="auditChannelFilter" class="aura-audit-select" title="按通道筛选">
+    page = ui
+      .auditPageTemplate()
+      .replace(
+        '<select id="auditChannelFilter" class="aura-audit-select" title="按通道筛选">\n            <option value="all">全部通道</option>\n          </select>',
+        `<select id="auditChannelFilter" class="aura-audit-select" title="按通道筛选">
             <option value="all">全部通道</option>
             ${channels
               .map((c) => `<option value="${c}">${c}</option>`)
               .join("")}
           </select>`
-    )
-    .replace(
-      '<section id="auditStatsContainer" class="aura-audit-stats"></section>',
-      `<section id="auditStatsContainer" class="aura-audit-stats">${ui.statsHtml(
-        ui.buildStats(entries, entries)
-      )}</section>`
-    )
-    .replace(
-      '<tbody id="auditTableBody"></tbody>',
-      `<tbody id="auditTableBody">${rows || ui.emptyStateHtml()}</tbody>`
-    )
-    .replace(
-      '<span id="auditCountHint" class="aura-audit-count">共 0 条</span>',
-      `<span id="auditCountHint" class="aura-audit-count">共 ${entries.length} 条</span>`
+      )
+      .replace(
+        '<section id="auditStatsContainer" class="aura-audit-stats"></section>',
+        `<section id="auditStatsContainer" class="aura-audit-stats">${ui.statsHtml(
+          ui.buildStats(entries, entries)
+        )}</section>`
+      )
+      .replace(
+        '<tbody id="auditTableBody"></tbody>',
+        `<tbody id="auditTableBody">${rows || ui.emptyStateHtml()}</tbody>`
+      )
+      .replace(
+        '<span id="auditCountHint" class="aura-audit-count">共 0 条</span>',
+        `<span id="auditCountHint" class="aura-audit-count">共 ${entries.length} 条</span>`
+      );
+  }
+
+  // 预览环境无法用相对路径解析 aura.svg, 改为内联 data URI
+  const logoPath = path.join(root, "src", "aura", "ui", "static", "aura.svg");
+  const logoDataUri = fs.existsSync(logoPath)
+    ? `data:image/svg+xml;base64,${fs.readFileSync(logoPath).toString("base64")}`
+    : "";
+  if (logoDataUri) {
+    page = page.replace(
+      /src="\.\.\/\.\.\/aura\/ui\/static\/aura\.svg"/g,
+      `src="${logoDataUri}"`
     );
+  }
 
   const css = cssFiles
     .map((f) => `<style>\n/* ${f} */\n${fs.readFileSync(path.join(root, f), "utf8")}\n</style>`)
@@ -246,7 +275,7 @@ ${css}
 </html>`;
 
   fs.mkdirSync(outDir, { recursive: true });
-  const suffix = process.argv[6] === "modal" ? "-modal" : "";
+  const suffix = mode === "audit" ? "" : `-${mode}`;
   const outFile = path.join(
     outDir,
     `audit-preview-${width}x${height}${suffix}.html`

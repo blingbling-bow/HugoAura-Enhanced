@@ -92,6 +92,10 @@
       "processNames": ["screenCapture.exe"],
       "pollIntervalMs": 2000
     },
+    "preventBootLock": {
+      "enabled": false,
+      "graceSeconds": 90
+    },
     "powerOffIntercept": {
       "enabled": false
     },

@@ -68,6 +68,7 @@
 const { withRetry, getPrototypeMethod, resolveModule } = require("./retryHook");
 const auditWriter = require("./auditWriter");
 const alertWindow = require("./alertWindow");
+const { performance } = require("perf_hooks");
 
 // 锁屏指令特征: messageType 1211, data.screenLockStatus === 1 (1=锁屏, 0=解锁)
 const LOCK_MESSAGE_TYPE = 1211;
@@ -89,7 +90,25 @@ const UNLOCK_FEEDBACK = {
   actionOperator: 1,
 };
 
-const hookFn = (central) => {
+/**
+ * 判定当前是否处于开机保护窗口内 (纯函数, 便于单测)。
+ * 窗口从钩子安装 (管家程序启动) 起算: 用户的场景是"程序一打开就会锁屏",
+ * 锁屏指令在启动后极短时间内到达。
+ * @param {{ elapsedMs: number, graceMs: number }} p
+ * @returns {boolean}
+ */
+const isWithinBootGrace = ({ elapsedMs, graceMs }) =>
+  Number.isFinite(elapsedMs) &&
+  elapsedMs >= 0 &&
+  Number.isFinite(graceMs) &&
+  graceMs >= 0 &&
+  elapsedMs <= graceMs;
+
+const hookFn = (central, deps = {}) => {
+  // 开机保护窗口从"钩子安装"(即管家程序启动) 起算 —— 用户的场景是
+  // "程序一打开就会锁屏", 因此不需要把开机自检的时间也算进去。
+  const installedAtMs = performance.now();
+  const getElapsedMs = deps.getElapsedMs || (() => performance.now() - installedAtMs);
   // 拿不到 electron 模块时不应中断安装 (后续仅在推送通知/审计事件时降级),
   // 更不能把异常抛回调用方 —— 钩子之间是隔离安装的。
   let electron = null;
@@ -185,6 +204,20 @@ const hookFn = (central) => {
     return {
       mode: cfg.mode === "notify" ? "notify" : "block",
     };
+  };
+
+  // >>> 开机锁屏保护 (禁止开机自动锁屏) <<<
+  // 部分学校会设置开机即自动锁屏。窗口期内 (默认开机后 10 分钟) 到达的
+  // 锁屏指令按"拦截 + 伪造锁屏回执"处理, 与集控端保持状态一致;
+  // 窗口期结束后完全不介入, 锁屏功能照常可用。
+  const getBootGuardConfig = () => {
+    const config = readConfig();
+    const cfg =
+      config && config.auraSettings && config.auraSettings.preventBootLock;
+    if (!cfg || !cfg.enabled) return null;
+    const seconds = Number(cfg.graceSeconds);
+    const graceSeconds = Number.isFinite(seconds) && seconds > 0 ? seconds : 90;
+    return { graceSeconds };
   };
 
   // 仅拦截锁屏指令 (screenLockStatus === 1); 解锁指令 (0) 放行
@@ -332,6 +365,58 @@ const hookFn = (central) => {
   };
 
   /**
+   * 开机自动锁屏拦截: 与 block 模式相同的 fail-closed 语义
+   * (伪造锁屏回执成功才吞掉指令; 失败则放行真实锁屏, 与集控端保持一致)。
+   * 审计记录带 bootGuard: true, 指令审计页可区分这是开机窗口期的拦截。
+   * @param {any} parsed 已解析的锁屏指令
+   * @param {string} source WS 来源
+   * @returns {boolean} true=已拦截 (吞掉指令) / false=放行 (fail-closed)
+   */
+  const handleBootAutoLock = (parsed, source) => {
+    const spoofed = sendScreenLockFeedback(
+      LOCK_FEEDBACK,
+      parsed.data && parsed.data.operationLogId,
+      "boot auto-lock blocked"
+    );
+    const passedThrough = !spoofed;
+
+    const record = {
+      ts: new Date().toISOString(),
+      source,
+      channel: "screenLockController",
+      url: `messageType:${LOCK_MESSAGE_TYPE}`,
+      action: passedThrough ? "passthrough" : "blocked",
+      mode: "bootGuard",
+      bootGuard: true,
+      feedbackSpoofed: spoofed,
+      data: parsed.data !== undefined ? parsed.data : null,
+      _logType: "lockScreen",
+    };
+    writeAudit(record);
+    pushAuditEvent(record);
+
+    if (passedThrough) {
+      console.warn(
+        "[HugoAura / BootLock] Boot auto-lock feedback unavailable, falling back to the real lock-screen (fail-closed)."
+      );
+      return false;
+    }
+
+    // 提醒失败不影响拦截结果 (吞掉指令已经生效)
+    try {
+      pushLockNotify(record);
+      alertWindow.showAlertWindow(electron, record);
+    } catch (err) {
+      console.error("[HugoAura / BootLock] Notify error:", err);
+    }
+
+    console.log(
+      `[HugoAura / BootLock] Blocked boot-time auto lock-screen from ${source} (within boot grace window).`
+    );
+    return true;
+  };
+
+  /**
    * 处理一条锁屏/解锁指令
    * @param {any} handler 模块 33 实例
    * @param {any} parsed 已解析的消息对象
@@ -342,6 +427,19 @@ const hookFn = (central) => {
     const isLock = isRemoteLock(parsed);
     const isUnlock = !isLock && isUnlockCommand(parsed);
     if (!isLock && !isUnlock) return false;
+
+    const source = getWsSource();
+
+    // 开机锁屏保护: 独立于 lockScreenIntercept, 窗口期内拦截开机自动锁屏
+    if (isLock) {
+      const bootCfg = getBootGuardConfig();
+      if (bootCfg) {
+        const graceMs = bootCfg.graceSeconds * 1000;
+        if (isWithinBootGrace({ elapsedMs: getElapsedMs(), graceMs })) {
+          return handleBootAutoLock(parsed, source);
+        }
+      }
+    }
 
     const cfg = getInterceptConfig();
     if (!cfg) {
@@ -357,7 +455,6 @@ const hookFn = (central) => {
     if (isUnlock) return handleIdleUnlock(handler, parsed, cfg.mode);
 
     const mode = cfg.mode;
-    const source = getWsSource();
 
     if (mode === "notify" && pendingLockTimer) {
       // 去抖: 已有待放行的锁屏指令, 忽略重复下发 (不重复弹窗/计时)
@@ -492,4 +589,8 @@ const hookFn = (central) => {
   withRetry(tryInstall, { label: "LockScreen" })();
 };
 
-module.exports = { hookFunc: hookFn };
+module.exports = {
+  hookFunc: hookFn,
+  // 纯函数: 开机保护窗口判定 (单测用)
+  isWithinBootGrace,
+};

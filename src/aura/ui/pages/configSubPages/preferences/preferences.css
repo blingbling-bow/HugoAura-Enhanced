@@ -7,81 +7,10 @@
   opacity: 0;
 }
 
-/* ===== About 子页样式 ===== */
+/* ===== 设计变量 (审计页与关于页共用) ===== */
+/* 定义在公共表单类 .aura-settings-form 上, 两个子页取到同一套配色 */
 
-.aura-settings-form.aura-about-form {
-  padding: 0.5rem 1.5rem;
-}
-
-.aura-about-contributors {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.9rem 1.25rem;
-  margin-top: 0.9rem;
-  max-width: 480px;
-}
-
-.aura-about-contributor {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  text-decoration: none;
-  color: inherit;
-}
-
-.aura-about-avatar {
-  position: relative;
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-}
-
-.aura-about-avatar .aura-about-avatar-fallback {
-  position: absolute;
-  inset: 0;
-  display: none; /* 默认隐藏, 仅当头像加载失败 (img 被隐藏) 时由 JS 显示 */
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: #e9ecef;
-  color: #495057;
-  font-weight: 600;
-  font-size: 16px;
-}
-
-.aura-about-avatar img {
-  position: relative;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.aura-about-contributor-name {
-  font-size: 14px;
-  opacity: 0.85;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ===== 指令审计子页样式 ===== */
-
-/*
- * 设计说明 —— 浅色精修版
- *
- * 管家窗口固定 880x600 (小屏缩放到 704x480), 页面纵向滚动, 不可拉伸。
- * 结构: 页头 -> 统计条 -> 可折叠「采集设置」 -> 面板 (筛选 / 表格 / 页脚)
- * 行内不再展开详情 (窗口太小看不全), 改为每行最右「详情」按钮弹出模态框,
- * 数据 (JSON) 全部在弹窗里看 —— 表格只保留一眼能扫完的信息。
- */
-
-.aura-audit-form {
-  /*
-   * 配色与管家其它界面保持一致: 蓝色渐变壁纸 + 半透明白容器,
-   * 透出来的就是"浅蓝加白"。所以这里**不再自带背景** ——
-   * 之前铺了纯白, 把子页容器的浅蓝底盖住了, 和别的页面不一致。
-   */
+.aura-settings-form {
   --audit-bg: #ffffff;
   --audit-panel: #ffffff;
   --audit-panel-2: #f8f9fa;
@@ -101,7 +30,300 @@
   --audit-purple: #7c3aed;
   --audit-gray: #94a3b8;
   --audit-mono: "Cascadia Mono", "Consolas", "SFMono-Regular", Menlo, monospace;
+}
 
+/* ===== About 子页样式 ===== */
+
+.aura-settings-form.aura-about-form {
+  padding: 0.85rem 1rem 1.25rem;
+}
+
+.aura-about-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 0.9rem;
+  /* 英雄区垫一层半透明白: 页面是透明底, 直接坐在蓝壁纸上会看不清 */
+  background: var(--audit-surface);
+  border: 1px solid var(--audit-border);
+  border-radius: 12px;
+}
+
+.aura-about-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.aura-about-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #218fff 0%, #3fbaff 100%);
+  box-shadow: 0 6px 16px -6px rgba(33, 143, 255, 0.6);
+}
+
+/* aura.svg 是透明底的白星, 铺在主题蓝渐变上 = 与主界面一致 */
+.aura-about-logo-img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+
+.aura-about-logo-fallback {
+  display: none;
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.aura-about-name {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.85);
+}
+
+.aura-about-name span {
+  color: #218fff;
+}
+
+.aura-about-tagline {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: rgba(0, 0, 0, 0.5);
+  max-width: 460px;
+}
+
+.aura-about-version {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  font-family: var(--audit-mono);
+  font-size: 0.74rem;
+  color: #218fff;
+  background: rgba(33, 143, 255, 0.1);
+  border: 1px solid rgba(33, 143, 255, 0.3);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.aura-about-stats {
+  margin-top: 0.75rem;
+}
+
+.aura-about-ver {
+  font-family: var(--audit-mono);
+  font-size: 0.95rem !important;
+}
+
+.aura-about-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.7rem;
+  background: var(--audit-surface);
+  border-bottom: 1px solid var(--audit-border);
+}
+
+.aura-about-panel-title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.8);
+}
+
+.aura-about-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.7rem;
+}
+
+.aura-about-row-text {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.aura-about-row-title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.8);
+}
+
+.aura-about-row-desc {
+  margin: 0.15rem 0 0;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.aura-about-row-desc.ase-desc-error-hint {
+  color: rgba(230, 0, 0);
+  opacity: 0.875;
+}
+
+.aura-about-row-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.aura-about-row-actions > * + * {
+  margin-left: 0.4rem;
+}
+
+.aura-about-btn-accent {
+  color: #fff !important;
+  background: linear-gradient(135deg, #218fff 0%, #3fbaff 100%) !important;
+  border: none !important;
+}
+
+.aura-about-btn-accent:hover {
+  color: #fff;
+  filter: brightness(1.06);
+}
+
+.aura-about-contributors {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.7rem;
+}
+
+.aura-about-contributor {
+  display: inline-flex;
+  margin: 0 0.5rem 0.5rem 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+.aura-about-avatar {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+}
+
+.aura-about-avatar .aura-about-avatar-fallback {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: none; /* 默认隐藏, 仅当头像加载失败 (img 被隐藏) 时由 JS 显示 */
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(33, 143, 255, 0.15);
+  color: #218fff;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.aura-about-avatar img {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.aura-about-contributor:hover .aura-about-avatar {
+  box-shadow: 0 0 0 2px rgba(33, 143, 255, 0.4);
+}
+
+.aura-about-license-text {
+  padding: 0.6rem 0.7rem;
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+/* 功能清单 (与 README 保持一致): 两栏排布, 已完成的打蓝绿勾 */
+.aura-about-features {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 0.55rem 0.7rem 0.3rem;
+}
+
+.aura-about-feature {
+  display: inline-flex;
+  align-items: baseline;
+  flex: 1 1 46%;
+  min-width: 230px;
+  margin: 0 0.5rem 0.4rem 0;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--audit-text);
+}
+
+.aura-about-feature-mark {
+  flex: 0 0 auto;
+  margin-right: 0.35rem;
+  font-weight: 700;
+}
+
+.aura-about-feature-done .aura-about-feature-mark {
+  color: var(--audit-success);
+}
+
+.aura-about-feature-todo .aura-about-feature-mark {
+  color: var(--audit-gray);
+}
+
+.aura-about-panel-hint {
+  font-size: 0.68rem;
+  color: var(--audit-muted);
+}
+
+/* 社群与链接 */
+.aura-about-links {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.7rem;
+}
+
+.aura-about-link {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0.5rem 0.4rem 0;
+  padding: 0.22rem 0.55rem;
+  font-size: 0.72rem;
+  color: var(--audit-primary);
+  background: rgba(33, 143, 255, 0.08);
+  border: 1px solid rgba(33, 143, 255, 0.25);
+  border-radius: 999px;
+  text-decoration: none;
+}
+
+.aura-about-link:hover {
+  background: rgba(33, 143, 255, 0.16);
+  color: var(--audit-primary-strong, #1b7fe6);
+}
+
+/* ===== 指令审计子页样式 ===== */
+
+/*
+ * 设计说明 —— 浅色精修版
+ *
+ * 管家窗口固定 880x600 (小屏缩放到 704x480), 页面纵向滚动, 不可拉伸。
+ * 结构: 页头 -> 统计条 -> 可折叠「采集设置」 -> 面板 (筛选 / 表格 / 页脚)
+ * 行内不再展开详情 (窗口太小看不全), 改为每行最右「详情」按钮弹出模态框,
+ * 数据 (JSON) 全部在弹窗里看 —— 表格只保留一眼能扫完的信息。
+ */
+
+/* 审计子页容器: 透明底, 透出子页容器的浅蓝加白 */
+.aura-audit-form {
   padding: 0.85rem 1rem 1.25rem;
   color: var(--audit-text);
   background: transparent;
@@ -115,8 +337,10 @@
   align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
-  padding-bottom: 0.7rem;
-  border-bottom: 1px solid var(--audit-border);
+  padding: 0.7rem 0.9rem;
+  background: var(--audit-surface);
+  border: 1px solid var(--audit-border);
+  border-radius: 12px;
 }
 
 .aura-audit-hero-text {

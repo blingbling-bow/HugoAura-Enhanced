@@ -452,15 +452,28 @@ const hookFunc = (central) => {
   const getChannelMap = () => {
     if (channelMapCache) return channelMapCache;
     const map = {};
+    const tried = [];
     for (const id of [0, 174]) {
       try {
         const table = resolveModule(central, id);
-        Object.assign(map, buildChannelMap(table));
-      } catch {
-        // 单个模块取不到不影响另一个
+        const built = buildChannelMap(table);
+        tried.push(`模块 ${id}: ${Object.keys(built).length} 条`);
+        Object.assign(map, built);
+      } catch (err) {
+        tried.push(`模块 ${id}: 抛错 ${err && err.message}`);
       }
     }
-    if (Object.keys(map).length > 0) channelMapCache = map;
+    if (Object.keys(map).length > 0) {
+      channelMapCache = map;
+      console.log(
+        `[HugoAura / WsAuditTap] Channel map resolved: ${Object.keys(map).length} channels.`
+      );
+    } else {
+      // 理论上不会发生 (模块 0/174 都含通道表); 留诊断便于真机排查
+      console.warn(
+        `[HugoAura / WsAuditTap] Channel map unavailable (${tried.join(" | ")}); 通道名将退化为 URL 最后一段。`
+      );
+    }
     return map;
   };
 

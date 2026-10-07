@@ -30,6 +30,9 @@
 
 const { withRetry, resolveModule, shouldScan, resolveByScan } = require("./retryHook");
 const auditWriter = require("./auditWriter");
+// 管家内置 Node 较老, 全局没有 performance, 必须显式引入 perf_hooks
+// (漏了它会每条 https 请求抛一次 ReferenceError, 出站审计完全不生效)
+const { performance } = require("perf_hooks");
 
 const AUDIT_FILE = "cloudCommandAudit.log";
 
