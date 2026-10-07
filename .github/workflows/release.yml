@@ -65,7 +65,14 @@ jobs:
 
           # 自动生成更新日志: 上一版本 tag 之后的所有提交标题, 按提交类型分组
           # (提交标题遵循 [emoji 类型] 描述 约定)。
-          COMMITS=$(git log --format="%s" ${PREV_TAG:+$PREV_TAG..}HEAD)
+          # 注意两处过滤:
+          #   1. 用 git commit -F 提交时标题可能带 UTF-8 BOM, 先剥掉再分组,
+          #      否则 "^\[✨" 这类锚定正则全部匹配不上 (v0.3.1 即因此把
+          #      新增项错分到「其它变更」);
+          #   2. 版本发布准备提交 ([🚀 Release]) 属于流程性提交, 不进更新日志。
+          COMMITS=$(git log --format="%s" ${PREV_TAG:+$PREV_TAG..}HEAD \
+            | sed 's/^\xEF\xBB\xBF//' \
+            | grep -v "^\[🚀 Release\]" || true)
           group() {
             echo "$COMMITS" | grep -E "$1" | sed -E "s/^\[[^]]+\] +//" | sed "s/^/- /" || true
           }
