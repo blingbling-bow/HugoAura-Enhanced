@@ -58,11 +58,65 @@ jobs:
             *) RELEASE_TYPE="✅ 正式版 (Stable Release)" ;;
           esac
 
-          # 找上一个 tag (按创建时间排序, 排除当前 tag), 用于生成"完整更新日志"的 compare 链接。
+          # 上一版本 tag (按创建时间排序, 排除当前 tag): 用于生成"完整更新日志"的 compare 链接。
           # 只接受 v<数字>.<数字>.<数字> 形式的版本 tag: pack.yml 产生的
-          # vAutoBuild-<hash> 数量远超正式版本 tag, 不过滤会选中最近一次 CI 构建,
-          # 使 compare 范围缩成一次构建; 该正则同时也排除任何非版本标记 tag。
+          # vAutoBuild-<hash> 数量远超正式版本 tag, 不过滤会选中最近一次 CI 构建。
           PREV_TAG=$(git tag --sort=-creatordate | grep -E "^v[0-9]+\.[0-9]+\.[0-9]+" | grep -v "^${TAG_NAME}$" | head -n 1 || true)
+
+          # 自动生成更新日志: 上一版本 tag 之后的所有提交标题, 按提交类型分组
+          # (提交标题遵循 [emoji 类型] 描述 约定)。
+          COMMITS=$(git log --format="%s" ${PREV_TAG:+$PREV_TAG..}HEAD)
+          group() {
+            echo "$COMMITS" | grep -E "$1" | sed -E "s/^\[[^]]+\] +//" | sed "s/^/- /" || true
+          }
+          FEAT_LIST=$(group "^\[(✨|feat)")
+          FIX_LIST=$(group "^\[(🛠|🐞|fix)")
+          STYLE_LIST=$(group "^\[(🎨|style)")
+          CHORE_LIST=$(group "^\[(🔄|chore|📝|⬆|🔧)")
+          OTHER_LIST=$(echo "$COMMITS" | grep -vE "^\[(✨|🛠|🐞|🎨|🔄|📝|⬆|🔧|feat|fix|chore|style)" | sed "s/^/- /" || true)
+
+          CHANGELOG=""
+          if [ -n "$FEAT_LIST" ]; then
+            CHANGELOG="${CHANGELOG}
+          ## ✨ 新增 / Features
+
+          ${FEAT_LIST}"
+          fi
+          if [ -n "$FIX_LIST" ]; then
+            CHANGELOG="${CHANGELOG}
+
+          ## 🛠 修复 / Fixes
+
+          ${FIX_LIST}"
+          fi
+          if [ -n "$STYLE_LIST" ]; then
+            CHANGELOG="${CHANGELOG}
+
+          ## 🎨 界面 / UI
+
+          ${STYLE_LIST}"
+          fi
+          if [ -n "$CHORE_LIST" ]; then
+            CHANGELOG="${CHANGELOG}
+
+          ## 🔄 其它 / Chores
+
+          ${CHORE_LIST}"
+          fi
+          if [ -n "$OTHER_LIST" ]; then
+            CHANGELOG="${CHANGELOG}
+
+          ### 其它变更
+
+          ${OTHER_LIST}"
+          fi
+
+          # compare 链接: 找不到前置 tag 时会退化, 改用提交列表页
+          if [ -n "$PREV_TAG" ]; then
+            FULL_CHANGELOG="https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${TAG_NAME}"
+          else
+            FULL_CHANGELOG="https://github.com/${{ github.repository }}/commits/${TAG_NAME}"
+          fi
 
           cat > "$GITHUB_WORKSPACE/rel_msg.txt" << EOF
           # HugoAura Enhanced 新版本已发布
@@ -72,33 +126,21 @@ jobs:
           **版本号：** \`${TAG_NAME}\`
 
           > [!注意]
-          > 如果您在最新版管家 (v1.6.7.4010) 上安装时遇到问题，请务必确认您使用的是否为 v0.0.3-beta-III 或更高版本的 HugoAura Enhanced 安装器。
-          >安装器下载链接:https://github.com/blingbling-bow/HugoAura-Enhanced-Install/releases
+          > 如果您在最新版管家 (v1.6.7.4018) 上安装时遇到问题，请务必确认您使用的是否为 v0.0.3-beta-III 或更高版本的 HugoAura Enhanced 安装器。
+          > 安装器下载链接: https://github.com/blingbling-bow/HugoAura-Enhanced-Install/releases
 
           # 更新日志 / Changelog
 
           **从 \`${PREV_TAG:-仓库初始}\` 之后**
 
           ## ${TAG_NAME}
-
-          _（更新日志由维护者整理后补充）_
-
-          EOF
-
-          # 找不到前置 tag 时 compare 链接会退化成 "...<tag>" 这类坏链接, 改用提交列表页
-          if [ -n "$PREV_TAG" ]; then
-            FULL_CHANGELOG="https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${TAG_NAME}"
-          else
-            FULL_CHANGELOG="https://github.com/${{ github.repository }}/commits/${TAG_NAME}"
-          fi
-
-          cat >> "$GITHUB_WORKSPACE/rel_msg.txt" << EOF
+          ${CHANGELOG}
 
           # Version alignment / 版本对齐信息
 
           **此 Release 发布时对齐的 Commit：** \`$SHORT_HASH\`
 
-          **此 Release 对齐的希沃管家版本：** \`v1.6.7.4010\`
+          **此 Release 对齐的希沃管家版本：** \`v1.6.7.4018\`
 
           **🕘 构建时间： $BUILDTIME**
 
