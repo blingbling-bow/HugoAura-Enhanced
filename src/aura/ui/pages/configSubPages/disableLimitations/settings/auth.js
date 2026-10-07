@@ -572,12 +572,12 @@ const authSettings = [
         type: "switch",
         name: "云端更新指令全面拦截",
         description:
-          "在云端指令到达执行模块前, 实时捕获并拦截所有更新指令, 记录指令内容/时间/来源到审计日志",
+          "在云端指令到达执行模块前, 实时捕获并拦截所有更新指令, 记录指令内容/时间/来源到审计日志 (可在「偏好设置 - 指令审计」中查看)",
         restart: false,
         reload: false,
         tip: true,
         tipTitle:
-          "拦截点: SeewoProxyHTTP 与 proxyWebsocketHost 两条 WS 连接的总入口。启用后所有云端更新指令 (含升级状态/反馈/固件升级) 均被拦截, 并写入 logs/cloudCommandAudit.log",
+          "拦截点: SeewoProxyHTTP 与 proxyWebsocketHost 两条 WS 连接的总入口。启用后所有云端更新指令 (含升级状态/反馈/固件升级) 均被拦截, 并写入 logs/cloudCommandAudit.log。审计页默认同时采集远程控制/病毒服务/语音/绑定等其余 WS 通道的指令, 未知指令会以「未识别」高亮",
         warning: true,
         warningContent:
           "拦截发生在指令分发前, 可阻止更新类指令到达执行模块。审计日志位于 HugoAura 数据目录 logs/cloudCommandAudit.log",

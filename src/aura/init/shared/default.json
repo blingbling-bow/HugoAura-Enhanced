@@ -100,8 +100,11 @@
       "mode": "block"
     },
     "cloudCommandAudit": {
-      "enabled": false,
-      "retentionDays": 7
+      "enabled": true,
+      "retentionDays": 7,
+      "tapAllChannels": true,
+      "refreshOnInstall": true,
+      "auditHttpResponses": true
     },
     "unlockAudit": {
       "enabled": false

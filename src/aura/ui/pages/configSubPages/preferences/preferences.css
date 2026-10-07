@@ -67,153 +67,1047 @@
 
 /* ===== 指令审计子页样式 ===== */
 
+/*
+ * 设计说明 —— 浅色精修版
+ *
+ * 管家窗口固定 880x600 (小屏缩放到 704x480), 页面纵向滚动, 不可拉伸。
+ * 结构: 页头 -> 统计条 -> 可折叠「采集设置」 -> 面板 (筛选 / 表格 / 页脚)
+ * 行内不再展开详情 (窗口太小看不全), 改为每行最右「详情」按钮弹出模态框,
+ * 数据 (JSON) 全部在弹窗里看 —— 表格只保留一眼能扫完的信息。
+ */
+
 .aura-audit-form {
-  padding: 0.5rem 1.5rem;
+  /*
+   * 配色与管家其它界面保持一致: 蓝色渐变壁纸 + 半透明白容器,
+   * 透出来的就是"浅蓝加白"。所以这里**不再自带背景** ——
+   * 之前铺了纯白, 把子页容器的浅蓝底盖住了, 和别的页面不一致。
+   */
+  --audit-bg: #ffffff;
+  --audit-panel: #ffffff;
+  --audit-panel-2: #f8f9fa;
+  --audit-surface: rgba(255, 255, 255, 0.55);
+  --audit-surface-2: rgba(255, 255, 255, 0.9);
+  --audit-border: rgba(15, 23, 42, 0.1);
+  --audit-border-strong: rgba(15, 23, 42, 0.2);
+  --audit-text: rgba(0, 0, 0, 0.8);
+  --audit-muted: rgba(0, 0, 0, 0.5);
+  /* 主题蓝与 authDialog 确认按钮一致 */
+  --audit-primary: #218fff;
+  --audit-primary-strong: #1b7fe6;
+  --audit-danger: #dc2626;
+  --audit-warning: #d97706;
+  --audit-info: #0891b2;
+  --audit-success: #059669;
+  --audit-purple: #7c3aed;
+  --audit-gray: #94a3b8;
+  --audit-mono: "Cascadia Mono", "Consolas", "SFMono-Regular", Menlo, monospace;
+
+  padding: 0.85rem 1rem 1.25rem;
+  color: var(--audit-text);
+  background: transparent;
+  border-radius: 12px;
 }
 
-/* --- 工具栏 --- */
+/* ---------- 页头 ---------- */
 
-.aura-audit-toolbar {
+.aura-audit-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding-bottom: 0.7rem;
+  border-bottom: 1px solid var(--audit-border);
+}
+
+.aura-audit-hero-text {
+  flex: 1 1 300px;
+  min-width: 0;
+}
+
+.aura-audit-hero-title {
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--audit-text);
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  margin-top: 0.75rem;
-  margin-bottom: 0.75rem;
 }
 
-.aura-audit-toolbar-search {
-  flex: 1;
-  min-width: 200px;
+/* 运行指示灯: 呼吸动画, 表明采集在跑 */
+.aura-audit-hero-live {
+  position: relative;
+  margin-left: 0.45rem;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--audit-success);
+  flex: 0 0 auto;
 }
 
-.aura-audit-toolbar-select {
-  width: auto;
-  min-width: 130px;
+.aura-audit-hero-live::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: var(--audit-success);
+  opacity: 0.35;
+  animation: aura-live-pulse 2s ease-out infinite;
 }
 
-/* --- 统计卡片 --- */
+@keyframes aura-live-pulse {
+  0% { transform: scale(0.6); opacity: 0.45; }
+  70% { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aura-audit-hero-live::after { animation: none; }
+}
+
+.aura-audit-hero-desc {
+  margin: 0.3rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  color: var(--audit-muted);
+}
+
+.aura-audit-hero-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  margin-left: 0.75rem;
+}
+
+/*
+ * 间距一律用 margin 而不是 flex 的 gap: 管家内置的 Chromium 版本较老,
+ * 不支持 flex gap, 三个按钮会贴在一起 (grid 的 gap 没有这个问题)。
+ */
+.aura-audit-icon-btn + .aura-audit-icon-btn {
+  margin-left: 0.45rem;
+}
+
+/* ---------- 按钮 ---------- */
+
+.aura-audit-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.76rem;
+  line-height: 1.2;
+  color: var(--audit-text);
+  background: var(--audit-bg);
+  border: 1px solid var(--audit-border-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.08s;
+}
+
+.aura-audit-btn:hover {
+  background: var(--audit-surface-2);
+  border-color: var(--audit-primary);
+  color: var(--audit-primary);
+}
+
+.aura-audit-btn:active {
+  transform: translateY(1px);
+}
+
+/* 页头右上角的纯图标按钮 (刷新 / 导出 / 清空) */
+.aura-audit-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: var(--audit-text);
+  background: var(--audit-bg);
+  border: 1px solid var(--audit-border-strong);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.08s;
+}
+
+.aura-audit-icon-btn:hover {
+  color: var(--audit-primary);
+  background: var(--audit-surface-2);
+  border-color: var(--audit-primary);
+}
+
+.aura-audit-icon-btn:active {
+  transform: translateY(1px);
+}
+
+.aura-audit-btn-svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.aura-audit-icon-btn-danger {
+  color: var(--audit-danger);
+  border-color: rgba(220, 38, 38, 0.35);
+}
+
+.aura-audit-icon-btn-danger:hover {
+  color: #fff;
+  background: var(--audit-danger);
+  border-color: var(--audit-danger);
+}
+
+.aura-audit-btn-sm {
+  padding: 0.18rem 0.42rem;
+  font-size: 0.72rem;
+}
+
+.aura-audit-btn-danger {
+  color: var(--audit-danger);
+  border-color: rgba(220, 38, 38, 0.35);
+}
+
+.aura-audit-btn-danger:hover {
+  color: #fff;
+  background: var(--audit-danger);
+  border-color: var(--audit-danger);
+}
+
+/* ---------- 统计卡片 ---------- */
 
 .aura-audit-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 0.75rem;
-  margin-top: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.75rem;
 }
 
-.aura-audit-stat-card {
+.aura-audit-stat {
   position: relative;
+  padding: 0.5rem 0.6rem 0.45rem;
+  background: linear-gradient(180deg, var(--audit-surface), transparent);
+  border: 1px solid var(--audit-border);
   border-radius: 10px;
-  padding: 0.85rem 1rem 0.75rem 1.1rem;
-  background: rgba(0, 0, 0, 0.025);
-  border: 1px solid rgba(0, 0, 0, 0.06);
   overflow: hidden;
-  transition: border-color 0.15s, background 0.15s;
 }
 
-.aura-audit-stat-card::before {
+.aura-audit-stat::before {
   content: "";
   position: absolute;
-  left: 0;
   top: 0;
   bottom: 0;
+  left: 0;
   width: 3px;
-  border-radius: 10px 0 0 10px;
+  background: var(--audit-gray);
 }
 
-.aura-audit-stat-primary::before { background: #0d6efd; }
-.aura-audit-stat-info::before { background: #0dcaf0; }
-.aura-audit-stat-danger::before { background: #dc3545; }
-.aura-audit-stat-warning::before { background: #fd7e14; }
-.aura-audit-stat-secondary::before { background: #6c757d; }
+.aura-audit-stat[data-sev="primary"]::before { background: var(--audit-primary); }
+.aura-audit-stat[data-sev="danger"]::before { background: var(--audit-danger); }
+.aura-audit-stat[data-sev="warning"]::before { background: var(--audit-warning); }
+.aura-audit-stat[data-sev="info"]::before { background: var(--audit-info); }
+.aura-audit-stat[data-sev="secondary"]::before { background: var(--audit-gray); }
 
-.aura-audit-stat-value {
-  font-size: 1.35rem;
-  font-weight: 700;
-  line-height: 1.2;
+.aura-audit-stat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
-
-.aura-audit-stat-primary .aura-audit-stat-value { color: #0d6efd; }
-.aura-audit-stat-info .aura-audit-stat-value { color: #0dcaf0; }
-.aura-audit-stat-danger .aura-audit-stat-value { color: #dc3545; }
-.aura-audit-stat-warning .aura-audit-stat-value { color: #fd7e14; }
-.aura-audit-stat-secondary .aura-audit-stat-value { color: #6c757d; }
 
 .aura-audit-stat-label {
-  font-size: 0.75rem;
-  opacity: 0.65;
-  margin-top: 0.25rem;
-}
-
-/* --- 表格容器 --- */
-
-.aura-audit-table-wrap {
-  max-height: 420px;
-  overflow: auto;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 10px;
-}
-
-/* --- 表头 --- */
-
-.aura-audit-table {
-  margin-bottom: 0;
-}
-
-.aura-audit-table th {
-  position: sticky;
-  top: 0;
-  background: #f1f3f5;
-  z-index: 1;
-  font-size: 0.78rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  padding: 0.55rem 0.6rem;
-}
-
-/* --- 表体 --- */
-
-.aura-audit-table td {
-  font-size: 0.8rem;
-  vertical-align: middle;
-  padding: 0.45rem 0.6rem;
-  border-color: rgba(0, 0, 0, 0.05);
-}
-
-.aura-audit-cell-time,
-.aura-audit-cell-source {
-  white-space: nowrap;
-  font-size: 0.76rem;
-  opacity: 0.8;
-}
-
-.aura-audit-cell-url {
-  font-size: 0.76rem;
-  word-break: break-all;
-  color: #0d6efd;
-}
-
-.aura-audit-cell-data {
-  font-size: 0.76rem;
-  color: #495057;
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+  color: var(--audit-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 0;
 }
 
-/* --- 空状态 --- */
-
-.aura-audit-table .text-center {
-  text-align: center;
-  padding: 2.5rem 1rem;
-  opacity: 0.5;
+.aura-audit-stat-dot {
+  flex: 0 0 auto;
+  margin-left: 0.3rem;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--audit-border-strong);
 }
 
-/* --- 底部提示 --- */
+.aura-audit-stat[data-sev="primary"] .aura-audit-stat-dot { background: var(--audit-primary); }
+.aura-audit-stat[data-sev="danger"] .aura-audit-stat-dot { background: var(--audit-danger); }
+.aura-audit-stat[data-sev="warning"] .aura-audit-stat-dot { background: var(--audit-warning); }
+.aura-audit-stat[data-sev="info"] .aura-audit-stat-dot { background: var(--audit-info); }
 
-.aura-audit-hint {
+.aura-audit-stat-value {
+  margin-top: 0.18rem;
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--audit-text);
+}
+
+.aura-audit-stat[data-sev="primary"] .aura-audit-stat-value { color: var(--audit-primary); }
+.aura-audit-stat[data-sev="danger"] .aura-audit-stat-value { color: var(--audit-danger); }
+.aura-audit-stat[data-sev="warning"] .aura-audit-stat-value { color: var(--audit-warning); }
+.aura-audit-stat[data-sev="info"] .aura-audit-stat-value { color: var(--audit-info); }
+.aura-audit-stat[data-sev="secondary"] .aura-audit-stat-value { color: var(--audit-muted); }
+
+.aura-audit-stat-sub {
+  margin-left: 0.25rem;
+  font-size: 0.66rem;
+  font-weight: 500;
+  color: var(--audit-muted);
+}
+
+/* ---------- 采集设置 (可折叠) ---------- */
+
+.aura-audit-settings {
   margin-top: 0.75rem;
+  background: var(--audit-panel);
+  border: 1px solid var(--audit-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.aura-audit-settings-summary {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0.7rem;
+  background: var(--audit-surface);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.aura-audit-settings-summary::-webkit-details-marker {
+  display: none;
+}
+
+.aura-audit-settings-summary:hover {
+  background: var(--audit-surface-2);
+}
+
+.aura-audit-settings-caret {
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  border-left: 4px solid var(--audit-muted);
+  transition: transform 0.15s;
+}
+
+.aura-audit-settings[open] .aura-audit-settings-caret {
+  transform: rotate(90deg);
+}
+
+.aura-audit-settings-title {
+  margin-left: 0.45rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--audit-text);
+}
+
+.aura-audit-settings-sub {
+  margin-left: 0.45rem;
+  font-size: 0.7rem;
+  color: var(--audit-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aura-audit-settings-body {
+  padding: 0.1rem 0.7rem 0.7rem;
+  border-top: 1px solid var(--audit-border);
+}
+
+/* 折叠卡里的设置项要更紧凑 (全局 .aura-settings-entry 是 1.5rem 间距) */
+.aura-audit-settings-body .aura-settings-entry {
+  margin-top: 0.7rem;
+}
+
+.aura-audit-settings-body .aura-settings-entry-title {
+  font-size: 0.8rem;
+  color: var(--audit-text);
+}
+
+.aura-audit-settings-body .aura-settings-entry-desc {
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  color: var(--audit-muted);
+}
+
+/* ---------- 面板 ---------- */
+
+.aura-audit-panel {
+  margin-top: 0.75rem;
+  background: var(--audit-panel);
+  border: 1px solid var(--audit-border);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -20px rgba(15, 23, 42, 0.35);
+}
+
+/* ---------- 筛选栏 ---------- */
+
+.aura-audit-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 0.55rem 0.7rem;
+  background: var(--audit-surface);
+  border-bottom: 1px solid var(--audit-border);
+}
+
+/* 同上: 用 margin 代替 flex gap (老 Chromium 不支持) */
+.aura-audit-filters > * + * {
+  margin-left: 0.4rem;
+}
+
+/* 搜索框: 图标是装饰, 真正执行搜索的是右侧「搜索」按钮 */
+.aura-audit-search {
+  display: flex;
+  align-items: center;
+  flex: 1 1 180px;
+  min-width: 140px;
+  margin: 0;
+  padding: 0 0.25rem;
+  background: var(--audit-bg);
+  border: 1px solid var(--audit-border-strong);
+  border-radius: 8px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.aura-audit-search:focus-within {
+  border-color: var(--audit-primary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+
+.aura-audit-search-ico {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.15rem 0 0.3rem;
+  color: var(--audit-muted);
+}
+
+.aura-audit-search-ico svg {
+  width: 12px;
+  height: 12px;
+  fill: var(--audit-muted);
+}
+
+.aura-audit-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.32rem 0.3rem;
+  font-size: 0.76rem;
+  color: var(--audit-text);
+  background: none;
+  border: none;
+  outline: none;
+}
+
+.aura-audit-search input::placeholder {
+  color: var(--audit-muted);
+  opacity: 0.75;
+}
+
+.aura-audit-search-clear {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-right: 0.15rem;
+  border: none;
+  background: var(--audit-surface-2);
+  color: var(--audit-muted);
+  border-radius: 50%;
+  font-size: 0.66rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.aura-audit-search-clear:hover {
+  color: var(--audit-danger);
+  background: rgba(220, 38, 38, 0.12);
+}
+
+.aura-audit-search.has-value .aura-audit-search-clear {
+  display: inline-flex;
+}
+
+/* 「搜索」按钮: 主题蓝实心, 与 authDialog 确认按钮同一套配色 */
+.aura-audit-search-go {
+  flex: 0 0 auto;
+  padding: 0.32rem 0.75rem;
+  font-size: 0.76rem;
+  color: #fff;
+  background: linear-gradient(135deg, #218fff 0%, #3fbaff 100%);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: box-shadow 0.15s, transform 0.08s, filter 0.15s;
+}
+
+.aura-audit-search-go:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 0 0 2px rgba(33, 143, 255, 0.22);
+}
+
+.aura-audit-search-go:active {
+  transform: translateY(1px);
+}
+
+.aura-audit-select {
+  flex: 0 1 auto;
+  max-width: 132px;
+  padding: 0.32rem 1.35rem 0.32rem 0.45rem;
+  font-size: 0.74rem;
+  color: var(--audit-text);
+  background-color: var(--audit-bg);
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%236b7280' d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.4rem center;
+  background-size: 9px;
+  border: 1px solid var(--audit-border-strong);
+  border-radius: 8px;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.aura-audit-select:focus {
+  border-color: var(--audit-primary);
+  outline: none;
+}
+
+/* 「仅未识别」开关: 用类名切激活态, 不依赖 :has() */
+.aura-audit-chip {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0.32rem 0.55rem;
+  font-size: 0.74rem;
+  color: var(--audit-muted);
+  background: var(--audit-bg);
+  border: 1px solid var(--audit-border-strong);
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.aura-audit-chip-input {
+  display: none;
+}
+
+.aura-audit-chip-dot {
+  margin-right: 0.3rem;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--audit-border-strong);
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.aura-audit-chip.is-on {
+  color: var(--audit-warning);
+  background: rgba(217, 119, 6, 0.08);
+  border-color: rgba(217, 119, 6, 0.45);
+}
+
+.aura-audit-chip.is-on .aura-audit-chip-dot {
+  background: var(--audit-warning);
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.14);
+}
+
+/* ---------- 表格 ---------- */
+
+.aura-audit-table-wrap {
+  max-height: 380px;
+  overflow: auto;
+}
+
+.aura-audit-table-wrap::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.aura-audit-table-wrap::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.18);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.aura-audit-table-wrap::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.32);
+  background-clip: padding-box;
+}
+
+.aura-audit-table-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.aura-audit-table {
+  width: 100%;
+  margin: 0;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.aura-audit-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 0.42rem 0.5rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--audit-muted);
+  background: var(--audit-surface-2);
+  border-bottom: 1px solid var(--audit-border-strong);
+  white-space: nowrap;
+}
+
+.aura-audit-row {
+  transition: background 0.12s;
+}
+
+.aura-audit-row:nth-child(even) {
+  background: rgba(15, 23, 42, 0.018);
+}
+
+.aura-audit-row:hover {
+  background: rgba(37, 99, 235, 0.045);
+}
+
+.aura-audit-row:hover .aura-audit-detail-btn {
+  border-color: var(--audit-primary);
+  color: var(--audit-primary);
+}
+
+.aura-audit-row > td {
+  padding: 0.42rem 0.5rem;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+
+/* 行首 3px 严重度色条 (inset 阴影: 不受 border-collapse 影响) */
+.aura-audit-row > td:first-child {
+  box-shadow: inset 3px 0 0 var(--audit-gray);
+}
+
+.aura-audit-row[data-sev="cloud"] > td:first-child { box-shadow: inset 3px 0 0 var(--audit-primary); }
+.aura-audit-row[data-sev="blocked"] > td:first-child { box-shadow: inset 3px 0 0 var(--audit-danger); }
+.aura-audit-row[data-sev="peek"] > td:first-child { box-shadow: inset 3px 0 0 var(--audit-warning); }
+.aura-audit-row[data-sev="powerOff"] > td:first-child { box-shadow: inset 3px 0 0 var(--audit-danger); }
+.aura-audit-row[data-sev="lockScreen"] > td:first-child { box-shadow: inset 3px 0 0 var(--audit-purple); }
+.aura-audit-row[data-sev="unlock"] > td:first-child { box-shadow: inset 3px 0 0 var(--audit-info); }
+.aura-audit-row[data-sev="http"] > td:first-child { box-shadow: inset 3px 0 0 var(--audit-success); }
+
+.aura-audit-td-time {
+  font-family: var(--audit-mono);
+  font-size: 0.69rem;
+  color: var(--audit-muted);
+  word-break: break-word;
+}
+
+.aura-audit-chan {
+  display: block;
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: var(--audit-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aura-audit-host {
+  display: block;
+  margin-top: 1px;
+  font-family: var(--audit-mono);
+  font-size: 0.64rem;
+  color: var(--audit-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 指令列: 中文名在上 (可读), 原始键在下 (可核对, 等宽) */
+.aura-audit-cmd-name {
+  display: block;
+  font-size: 0.73rem;
+  line-height: 1.35;
+  color: var(--audit-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aura-audit-cmd {
+  display: block;
+  margin-top: 1px;
+  font-family: var(--audit-mono);
+  font-size: 0.66rem;
+  color: var(--audit-primary);
+  background: none;
+  padding: 0;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+.aura-audit-flag {
+  display: inline-block;
+  margin-left: 0.3rem;
+  padding: 0 0.28rem;
+  font-size: 0.62rem;
+  line-height: 1.55;
+  color: #92400e;
+  background: rgba(217, 119, 6, 0.14);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  border-radius: 4px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.aura-audit-pill {
+  display: inline-block;
+  padding: 0.1rem 0.42rem;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.aura-audit-pill[data-tone="danger"] {
+  color: var(--audit-danger);
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.25);
+}
+
+.aura-audit-pill[data-tone="warning"] {
+  color: var(--audit-warning);
+  background: rgba(217, 119, 6, 0.08);
+  border-color: rgba(217, 119, 6, 0.25);
+}
+
+.aura-audit-pill[data-tone="primary"] {
+  color: var(--audit-primary);
+  background: rgba(37, 99, 235, 0.08);
+  border-color: rgba(37, 99, 235, 0.25);
+}
+
+.aura-audit-pill[data-tone="info"] {
+  color: var(--audit-info);
+  background: rgba(8, 145, 178, 0.08);
+  border-color: rgba(8, 145, 178, 0.25);
+}
+
+.aura-audit-pill[data-tone="secondary"] {
+  color: var(--audit-muted);
+  background: rgba(107, 114, 128, 0.08);
+  border-color: rgba(107, 114, 128, 0.25);
+}
+
+/* 耗时列: 等宽数字, 便于纵向比对 */
+.aura-audit-td-dur {
+  font-family: var(--audit-mono);
+  font-size: 0.7rem;
+  color: var(--audit-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 操作列: 详情按钮 */
+.aura-audit-td-op {
+  text-align: right;
+}
+
+.aura-audit-detail-btn {
+  padding: 0.16rem 0.42rem;
+  font-size: 0.7rem;
+  color: var(--audit-muted);
+  background: var(--audit-bg);
+  border-color: var(--audit-border-strong);
+}
+
+/* ---------- 弹出详情 (Modal) ---------- */
+
+.aura-audit-modal {
+  /*
+   * 定位说明: 必须用 absolute 而不是 fixed。
+   * 管家页面外层 (.aura-config-page-root) 常驻 transform: scale(1),
+   * 这会让 position:fixed 改为相对该容器定位 —— 结果弹窗被钉在整份文档的
+   * 末尾/中部, 表现为"飞到下面去了"。
+   * 正确做法与身份验证弹窗 (authDialog.css) 一致: 挂在窗口大小、不滚动的
+   * .aura-config-page-root 里, 用 absolute + 100% 铺满可视区。
+   */
+  --audit-bg: #ffffff;
+  --audit-panel: #ffffff;
+  --audit-panel-2: #f8f9fa;
+  --audit-surface: #f8f9fa;
+  --audit-surface-2: #eef1f4;
+  --audit-border: rgba(15, 23, 42, 0.1);
+  --audit-border-strong: rgba(15, 23, 42, 0.2);
+  --audit-text: rgba(0, 0, 0, 0.8);
+  --audit-muted: rgba(0, 0, 0, 0.5);
+  --audit-primary: #218fff;
+  --audit-danger: #dc2626;
+  --audit-warning: #d97706;
+  --audit-info: #0891b2;
+  --audit-success: #059669;
+  --audit-purple: #7c3aed;
+  --audit-gray: #94a3b8;
+
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  /* 遮罩调轻: 压暗背景但不至于和页面反差过大 */
+  background: rgba(15, 23, 42, 0.28);
+  animation: aura-modal-in 0.14s ease-out;
+}
+
+@keyframes aura-modal-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.aura-audit-modal-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 680px;
+  max-height: 86vh;
+  background: var(--audit-bg);
+  border: 1px solid var(--audit-border-strong);
+  border-radius: 12px;
+  box-shadow: 0 24px 60px -12px rgba(15, 23, 42, 0.45);
+  overflow: hidden;
+  animation: aura-modal-pop 0.16s ease-out;
+}
+
+@keyframes aura-modal-pop {
+  from { transform: translateY(8px) scale(0.985); opacity: 0.6; }
+  to { transform: none; opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aura-audit-modal, .aura-audit-modal-card { animation: none; }
+}
+
+.aura-audit-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 0.7rem 0.85rem;
+  background: var(--audit-surface);
+  border-bottom: 1px solid var(--audit-border);
+}
+
+.aura-audit-modal-close {
+  margin-left: 0.6rem;
+}
+
+.aura-audit-modal-title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--audit-text);
+}
+
+.aura-audit-modal-sub {
+  margin: 0.15rem 0 0;
+  font-family: var(--audit-mono);
+  font-size: 0.7rem;
+  color: var(--audit-muted);
+}
+
+/* 关闭按钮: 只有一个大号 ✕, 不带文字 */
+.aura-audit-modal-close {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  justify-content: center;
+  font-size: 1.05rem;
+  line-height: 1;
+  color: var(--audit-muted);
+  background: transparent;
+  border-color: transparent;
+}
+
+.aura-audit-modal-close:hover {
+  color: var(--audit-danger);
+  background: rgba(220, 38, 38, 0.08);
+  border-color: transparent;
+}
+
+/* 元信息: 键值两栏。左侧标签固定宽, 右侧长值在自身格子里折行 */
+.aura-audit-modal-meta {
+  margin: 0.6rem 0.85rem 0.6rem;
+  padding: 0.3rem 0.6rem;
+  background: var(--audit-surface);
+  border: 1px solid var(--audit-border);
+  border-radius: 8px;
+}
+
+.aura-audit-meta-row {
+  display: flex;
+  align-items: baseline;
+  padding: 0.22rem 0;
+}
+
+.aura-audit-meta-row + .aura-audit-meta-row {
+  border-top: 1px dashed var(--audit-border);
+}
+
+.aura-audit-meta-key {
+  flex: 0 0 3.6em;
+  font-size: 0.7rem;
+  color: var(--audit-muted);
+}
+
+.aura-audit-meta-val {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: 0.5rem;
+  font-family: var(--audit-mono);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--audit-text);
+  word-break: break-all;
+}
+
+/*
+ * 弹窗能滚动的关键: 卡片是纵向 flex 且限高了 (max-height: 86vh),
+ * 滚动区必须 flex: 1 + min-height: 0 才会被压缩到出现滚动条 ——
+ * 缺了 min-height: 0, 内容会把卡片撑高, 底部(含按钮)直接被截掉。
+ */
+.aura-audit-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 0.85rem 0.85rem;
+  overflow: auto;
+}
+
+.aura-audit-json {
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+  font-family: var(--audit-mono);
+  font-size: 0.69rem;
+  line-height: 1.55;
+  color: #334155;
+  /* 只比卡片底色深一丁点, 避免大色块反差 */
+  background: #fbfcfe;
+  border: 1px solid var(--audit-border);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.aura-audit-json::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.aura-audit-json::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.18);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.aura-json-key { color: var(--audit-purple); }
+.aura-json-str { color: var(--audit-success); }
+.aura-json-num { color: var(--audit-primary); }
+.aura-json-bool { color: var(--audit-warning); }
+.aura-json-null { color: var(--audit-gray); font-style: italic; }
+
+.aura-audit-modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  padding: 0.55rem 0.85rem;
+  background: var(--audit-surface);
+  border-top: 1px solid var(--audit-border);
+}
+
+/* ---------- 空状态 ---------- */
+
+.aura-audit-empty-row > td {
+  padding: 0;
+  border-bottom: 0;
+}
+
+.aura-audit-empty {
+  padding: 2.4rem 1rem;
+  text-align: center;
+}
+
+.aura-audit-empty-ico {
+  font-size: 1.8rem;
+  line-height: 1;
+  color: var(--audit-border-strong);
+}
+
+.aura-audit-empty-title {
+  margin-top: 0.55rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--audit-muted);
+}
+
+.aura-audit-empty-desc {
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+  color: var(--audit-muted);
+  opacity: 0.7;
+}
+
+/* ---------- 面板页脚 ---------- */
+
+.aura-audit-panel-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.42rem 0.7rem;
+  font-size: 0.7rem;
+  color: var(--audit-muted);
+  background: var(--audit-surface);
+  border-top: 1px solid var(--audit-border);
+}
+
+.aura-audit-count {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.aura-audit-logpath {
+  margin-left: 0.5rem;
+  font-family: var(--audit-mono);
+  font-size: 0.65rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

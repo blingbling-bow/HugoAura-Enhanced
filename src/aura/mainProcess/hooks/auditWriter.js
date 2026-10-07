@@ -25,6 +25,10 @@ const fs = require("fs");
 const path = require("path");
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+// 按保留天数清理的节流间隔: 距离上次清理不足该时长则跳过, 避免频繁读盘
+const CLEANUP_INTERVAL_MS = 3600 * 1000;
+// fileName -> 上次清理时间
+const lastCleanupAt = {};
 
 /**
  * 解析 <auraDir>/logs/<fileName> 的绝对路径 (目录不存在时创建)
@@ -72,20 +76,97 @@ const rotateIfNeeded = (fileName, filePath) => {
 
 /**
  * 追加一条审计记录 (JSON Lines)
+ *
  * @param {string} fileName 日志文件名, 如 "cloudCommandAudit.log"
  * @param {any} record
+ * @param {{ retentionDays?: number }} [options] 传入 retentionDays 时, 写入后
+ *        惰性按保留天数清理 (节流 1 小时, 见 cleanupExpired)
  * @returns {boolean} 是否写入成功
  */
-const writeAudit = (fileName, record) => {
+const writeAudit = (fileName, record, options = {}) => {
   try {
     const filePath = resolveFilePath(fileName);
     if (!filePath) return false;
     rotateIfNeeded(fileName, filePath);
     fs.appendFileSync(filePath, JSON.stringify(record) + "\n", "utf8");
+    // 写完再清理: 刚写入的这条时间最新, 不会被自己删掉
+    if (options && options.retentionDays) {
+      cleanupExpired(fileName, options.retentionDays);
+    }
     return true;
   } catch (err) {
     console.error(`[HugoAura / Audit] Write error (${fileName}):`, err);
     return false;
+  }
+};
+
+/**
+ * 过滤出未过期的行 (纯函数, 便于单测)。
+ *
+ * 解析 JSON Lines 内容, 保留 ts >= cutoffTs 的行; 损坏行一律保留 (宁可留着
+ * 也不能因为一行解析失败就删掉整段历史)。
+ *
+ * @param {string} content 日志文件完整内容
+ * @param {number} cutoffTs 时间戳下限 (早于该时间的条目视为过期)
+ * @returns {{ kept: string[], removed: number }}
+ */
+const filterExpired = (content, cutoffTs) => {
+  const kept = [];
+  let removed = 0;
+  for (const line of String(content).split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const rec = JSON.parse(trimmed);
+      const ts = rec.ts ? new Date(rec.ts).getTime() : NaN;
+      if (!isNaN(ts) && ts < cutoffTs) {
+        removed++;
+        continue;
+      }
+    } catch {
+      // 损坏行保留, 不删除
+    }
+    kept.push(trimmed);
+  }
+  return { kept, removed };
+};
+
+/**
+ * 按保留天数清理指定审计文件 (节流 1 小时, 多进程/多 hook 调用安全)。
+ *
+ * 为什么放在这里: 保留天数原先只挂在 cloudUpdateInterceptor 的写入路径上,
+ * 于是"更新拦截关闭 + 主连接没有指令"时, 清理永远不触发, 其他 hook (关机/
+ * 锁屏/解锁/WS 探针) 写进去的记录会无限堆积, 设置页的保留天数形同虚设。
+ * 现在由共享写入器统一负责: 任何带 retentionDays 的写入都会顺带触发清理。
+ *
+ * @param {string} fileName
+ * @param {number} retentionDays
+ * @param {number} [now] 便于单测注入
+ * @returns {number} 删除的条目数
+ */
+const cleanupExpired = (fileName, retentionDays, now = Date.now()) => {
+  try {
+    const days = Number(retentionDays);
+    if (!Number.isFinite(days) || days <= 0) return 0;
+    if (now - (lastCleanupAt[fileName] || 0) < CLEANUP_INTERVAL_MS) return 0;
+    lastCleanupAt[fileName] = now;
+
+    const content = readAudit(fileName);
+    if (!content) return 0;
+    const { kept, removed } = filterExpired(
+      content,
+      now - days * 24 * 3600 * 1000
+    );
+    if (removed > 0) {
+      rewriteAudit(fileName, kept.length ? kept.join("\n") + "\n" : "");
+      console.log(
+        `[HugoAura / Audit] ${fileName}: cleaned ${removed} expired entries (>${days}d).`
+      );
+    }
+    return removed;
+  } catch (err) {
+    console.error(`[HugoAura / Audit] Cleanup error (${fileName}):`, err);
+    return 0;
   }
 };
 
@@ -123,4 +204,12 @@ const readAudit = (fileName) => {
   }
 };
 
-module.exports = { writeAudit, rewriteAudit, readAudit };
+module.exports = {
+  writeAudit,
+  rewriteAudit,
+  readAudit,
+  filterExpired,
+  cleanupExpired,
+  CLEANUP_INTERVAL_MS,
+  MAX_SIZE,
+};

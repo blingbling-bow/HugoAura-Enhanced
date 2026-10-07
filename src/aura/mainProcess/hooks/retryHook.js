@@ -261,6 +261,38 @@ const isWsClientInstance = (client) => {
 };
 
 /**
+ * 更宽松的 WS 客户端判定 (供全局审计探针 wsAuditTap 使用)。
+ *
+ * isWsClientInstance 额外要求原型 onMessage 源码里出现 "JSON.parse" —— 这个
+ * 特征对"扫描兜底定位 WS 基类"是必要的 (模块表里有几百个工厂, 特征越独特越好),
+ * 但作为"这条通道值不值得挂审计探针"的门槛就太严了: 个别客户端的 onMessage
+ * 只做转发 / 把解析交给辅助函数, 就会整条通道漏采, 而且是静默的。
+ *
+ * 这里只校验基类成员是否齐全 —— setHost / sendMessage / onMessage 三个方法
+ * (基类构造器全部 bind 过) 加上基类构造器初始化的状态字段 (ws / ready /
+ * relink / intervals) 至少之一。误判概率极低, 而漏挂的代价 (通道完全不可见)
+ * 远大于误挂。
+ *
+ * 安全性: 蹦床始终把**原始报文**透传给原 onMessage, 所以客户端即便自己解析
+ * 也不受影响; 探针处理函数恒返回 undefined, 不消费消息。
+ *
+ * @param {any} client 待判定对象
+ * @returns {boolean}
+ */
+const isWsClientLike = (client) => {
+  if (!client || typeof client !== "object") return false;
+  if (typeof client.setHost !== "function") return false;
+  if (typeof client.sendMessage !== "function") return false;
+  if (typeof client.onMessage !== "function") return false;
+  return (
+    Object.prototype.hasOwnProperty.call(client, "ws") ||
+    Object.prototype.hasOwnProperty.call(client, "ready") ||
+    Object.prototype.hasOwnProperty.call(client, "relink") ||
+    Object.prototype.hasOwnProperty.call(client, "intervals")
+  );
+};
+
+/**
  * 组装自检失败诊断串 (供日志定位失配原因)。
  */
 const describeWsFailure = (client, central, hints) => {
@@ -281,6 +313,85 @@ const describeWsFailure = (client, central, hints) => {
     `cacheEntries=${central.c ? Object.keys(central.c).length : 0}, ` +
     `hints=[${hints.join(",")}]`
   );
+};
+
+/**
+ * 建立 (或复用) WS 客户端上的共享拦截蹦床, 返回拦截器数组。
+ *
+ * 蹦床负责: 解析 JSON -> 依次调用拦截器 -> 按返回值决定消费/延迟/放行。
+ * 幂等: 已建立时直接返回既有拦截器数组 (多 hook 共享同一条链)。
+ *
+ * @param {any} client WS 客户端实例
+ * @returns {Function[]} 拦截器数组
+ */
+const ensureWsTrampoline = (client) => {
+  if (client[WS_TRAMPOLINE_FLAG]) return client[WS_INTERCEPTORS_FLAG];
+
+  const originalOnMessage = client.onMessage.bind(client);
+  const interceptors = [];
+  client[WS_INTERCEPTORS_FLAG] = interceptors;
+
+  client.onMessage = (rawMsg) => {
+    let parsed = null;
+    try {
+      parsed = JSON.parse(rawMsg);
+    } catch (err) {
+      // 非 JSON 消息原样透传, 不拦截
+      return originalOnMessage(rawMsg);
+    }
+
+    for (const h of interceptors) {
+      let ret = undefined;
+      try {
+        ret = h(parsed, rawMsg);
+      } catch (err) {
+        console.error("[HugoAura / WsHook] Interceptor error:", err);
+      }
+      if (ret === true) return; // 已消费 (拦截)
+      if (ret && typeof ret === "object" && Number(ret.delay) > 0) {
+        const ms = Number(ret.delay);
+        setTimeout(() => {
+          try {
+            originalOnMessage(rawMsg);
+          } catch (err) {
+            console.error("[HugoAura / WsHook] Delayed dispatch error:", err);
+          }
+        }, ms);
+        return;
+      }
+    }
+    return originalOnMessage(rawMsg);
+  };
+
+  client[WS_TRAMPOLINE_FLAG] = true;
+  return interceptors;
+};
+
+/**
+ * 断开已有连接以触发基类自动重连, 使 create() 闭包重新捕获蹦床。
+ *
+ * 原因: 基类 create() 在"连接建立时"一次性解构 onMessage 进闭包, 事后替换
+ * 实例属性不会被调用 —— 必须让连接重建一次。每个客户端只做一次。
+ *
+ * @param {any} client WS 客户端实例
+ * @param {string} label 日志标识
+ * @returns {boolean} true=本次真的触发了重连
+ */
+const refreshWsClient = (client, label) => {
+  if (!client.ws || client[WS_REFRESHED_FLAG]) return false;
+  client[WS_REFRESHED_FLAG] = true;
+  try {
+    client.intervals = 0; // 重连不退避 (基类 relinkFun 会 +2000ms, 约 2s 重连)
+    console.log(
+      `[HugoAura / WsHook] Refreshing ${label} connection to activate interceptor...`
+    );
+    client.ws.close();
+    return true;
+  } catch (err) {
+    console.error(`[HugoAura / WsHook] Failed to refresh ${label} connection:`, err);
+    client[WS_REFRESHED_FLAG] = false;
+    return false;
+  }
 };
 
 /**
@@ -338,75 +449,15 @@ const installWsInterceptor = (central, moduleId, label, handler, options = {}) =
       return false;
     }
 
-    // 首次安装: 建立共享蹦床
-    if (!client[WS_TRAMPOLINE_FLAG]) {
-      const originalOnMessage = client.onMessage.bind(client);
-      const interceptors = [];
-      client[WS_INTERCEPTORS_FLAG] = interceptors;
-
-      client.onMessage = (rawMsg) => {
-        let parsed = null;
-        try {
-          parsed = JSON.parse(rawMsg);
-        } catch (err) {
-          // 非 JSON 消息原样透传, 不拦截
-          return originalOnMessage(rawMsg);
-        }
-
-        for (const h of interceptors) {
-          let ret = undefined;
-          try {
-            ret = h(parsed, rawMsg);
-          } catch (err) {
-            console.error(
-              `[HugoAura / WsHook / ${label}] Interceptor error:`,
-              err
-            );
-          }
-          if (ret === true) return; // 已消费 (拦截)
-          if (ret && typeof ret === "object" && Number(ret.delay) > 0) {
-            const ms = Number(ret.delay);
-            setTimeout(() => {
-              try {
-                originalOnMessage(rawMsg);
-              } catch (err) {
-                console.error(
-                  `[HugoAura / WsHook / ${label}] Delayed dispatch error:`,
-                  err
-                );
-              }
-            }, ms);
-            return;
-          }
-        }
-        return originalOnMessage(rawMsg);
-      };
-
-      client[WS_TRAMPOLINE_FLAG] = true;
-    }
+    // 首次安装: 建立共享蹦床 (幂等, 多 hook 共用)
+    const interceptors = ensureWsTrampoline(client);
 
     // 注册处理函数 (防重复注册, 重试场景)
-    const interceptors = client[WS_INTERCEPTORS_FLAG];
     if (!interceptors.includes(handler)) interceptors.push(handler);
 
     // 连接已建立: 主动断开触发基类重连, 使 create() 闭包捕获蹦床。
     // 仅需执行一次 — 蹦床稳定存在, 后续注册的处理函数即时生效。
-    if (client.ws && !client[WS_REFRESHED_FLAG]) {
-      client[WS_REFRESHED_FLAG] = true;
-      try {
-        client.intervals = 0; // 重连不退避 (基类 relinkFun 会 +2000ms, 约 2s 重连)
-        console.log(
-          `[HugoAura / WsHook] Refreshing ${label} (module ${moduleId}) connection to activate interceptor...`
-        );
-        client.ws.close();
-      } catch (err) {
-        console.error(
-          `[HugoAura / WsHook] Failed to refresh ${label} connection:`,
-          err
-        );
-        client[WS_REFRESHED_FLAG] = false;
-      }
-    }
+    refreshWsClient(client, label);
 
     console.log(
       `[HugoAura / WsHook] Interceptor installed on ${label} (module ${moduleId}).`
@@ -472,5 +523,9 @@ module.exports = {
   resolveByScan,
   shouldScan,
   looksLikeModuleFactory,
+  isWsClientInstance,
+  isWsClientLike,
+  ensureWsTrampoline,
+  refreshWsClient,
   installWsInterceptor,
 };

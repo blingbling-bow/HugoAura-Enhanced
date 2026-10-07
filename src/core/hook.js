@@ -169,6 +169,8 @@ const launcher = ({ central, windowName, config }) => {
     installHook("DisableScreensaver", "../aura/mainProcess/hooks/disableScreensaver");
     installHook("DisableUpdate", "../aura/mainProcess/hooks/disableUpdate");
     installHook("CloudUpdateInterceptor", "../aura/mainProcess/hooks/cloudUpdateInterceptor");
+    installHook("WsAuditTap", "../aura/mainProcess/hooks/wsAuditTap");
+    installHook("HttpAuditTap", "../aura/mainProcess/hooks/httpAuditTap");
     installHook("ScreenPeekDetector", "../aura/mainProcess/hooks/screenPeekDetector");
     installHook("PowerOffInterceptor", "../aura/mainProcess/hooks/powerOffInterceptor");
     installHook("LockScreenInterceptor", "../aura/mainProcess/hooks/lockScreenInterceptor");
