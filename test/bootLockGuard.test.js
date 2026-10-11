@@ -4,12 +4,13 @@
 /**
  * 开机锁屏保护 (禁止开机自动锁屏) 集成测试
  *
- * 覆盖: 窗口期内锁屏指令被拦截并伪造回执; 窗口期外放行; 功能关闭时放行;
+ * 覆盖: 窗口期内云端锁屏指令被拦截并伪造回执; 窗口期外放行; 功能关闭时放行;
  * 回执通道失败时 fail-closed 放行 (与 lockScreenIntercept 同一套语义);
- * 解锁指令不受开机保护影响。
+ * 解锁指令不受开机保护影响; 本地 userLock 路径 (真机取证的开机自动锁屏
+ * 实际触发路径, 模块 375 "锁屏并注销"流程) 在窗口期内被吞掉、窗口期外放行。
  *
  * 窗口从"钩子安装"(管家程序启动) 起算, 默认 90 秒 —— 用户的场景是
- * "程序一打开就会锁屏", 锁屏指令在启动后极短时间内到达。
+ * "程序一打开就会锁屏", 锁屏在启动后极短时间内发生。
  */
 
 const test = require("node:test");
@@ -26,6 +27,8 @@ const makeEnv = ({ bootEnabled = true, elapsedSec = 1 } = {}) => {
   const lockFeedbackCalls = [];
   const unlockFeedbackCalls = [];
   const originalCalls = [];
+  const userLockCalls = [];
+  const pushedRecords = [];
 
   const proto = {
     // 源码需包含 "screenLockStatus" (锁屏控制器自检特征)
@@ -40,12 +43,20 @@ const makeEnv = ({ bootEnabled = true, elapsedSec = 1 } = {}) => {
   handler.message = null;
   handler.windows = [];
   handler.startLockTask = () => {};
-  handler.userLock = () => {};
+  handler.userLock = () => {
+    userLockCalls.push(1);
+  };
   handler.stopLockTask = () => {};
   handler.onMessage = handler.onMessage.bind(handler);
 
   const stubs = {
-    1: { ipcMain: { send() {} } },
+    1: {
+      ipcMain: {
+        // Aura 定制的 ipcMain.send 签名: (windowKey, channel, data)
+        send: (windowKey, channel, data) =>
+          pushedRecords.push({ windowKey, channel, data }),
+      },
+    },
     0: { hugoServiceWebsocket: { ip: "wss://127.0.0.1", url: "/x" } },
     33: handler,
     310: (payload) => {
@@ -72,6 +83,8 @@ const makeEnv = ({ bootEnabled = true, elapsedSec = 1 } = {}) => {
     lockFeedbackCalls,
     unlockFeedbackCalls,
     originalCalls,
+    userLockCalls,
+    pushedRecords,
     setElapsedSec: (sec) => {
       state.elapsedMs = sec * SECOND_MS;
     },
@@ -155,6 +168,55 @@ test("回执通道失败: fail-closed 放行真实锁屏 (与集控端保持一�
 
     assert.strictEqual(env.lockFeedbackCalls.length, 0);
     assert.strictEqual(env.originalCalls.length, 1, "fail-closed 应放行");
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("窗口期内: 本地 userLock (下课锁屏流程) 被吞掉并记审计", () => {
+  const env = makeEnv({ elapsedSec: 1 });
+  try {
+    env.handler.userLock();
+
+    assert.strictEqual(
+      env.userLockCalls.length,
+      0,
+      "真实锁屏调用应被跳过"
+    );
+    const pushed = env.pushedRecords.filter(
+      (p) => p.channel === "$aura.audit.onLog"
+    );
+    assert.strictEqual(pushed.length, 1, "应推送一条审计记录");
+    assert.strictEqual(pushed[0].data.record.bootGuard, true);
+    assert.strictEqual(pushed[0].data.record.url, "local:userLock");
+    assert.strictEqual(pushed[0].data.record.action, "blocked");
+    // 本地路径无云端指令, 不伪造回执
+    assert.strictEqual(env.lockFeedbackCalls.length, 0);
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("窗口期外: 本地 userLock 照常执行 (手动下课锁屏不受影响)", () => {
+  const env = makeEnv({ elapsedSec: 1 });
+  try {
+    env.setElapsedSec(120); // 超过 90 秒窗口
+
+    env.handler.userLock();
+
+    assert.strictEqual(env.userLockCalls.length, 1, "应原样执行");
+    assert.strictEqual(env.pushedRecords.length, 0, "不应产生审计/推送");
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("功能关闭时: 本地 userLock 照常执行", () => {
+  const env = makeEnv({ bootEnabled: false, elapsedSec: 1 });
+  try {
+    env.handler.userLock();
+    assert.strictEqual(env.userLockCalls.length, 1);
+    assert.strictEqual(env.pushedRecords.length, 0);
   } finally {
     env.cleanup();
   }

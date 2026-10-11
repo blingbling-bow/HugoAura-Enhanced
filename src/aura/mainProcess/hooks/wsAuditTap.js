@@ -33,6 +33,7 @@ const {
   isWsClientLike,
   ensureWsTrampoline,
   refreshWsClient,
+  resolveModule,
 } = require("./retryHook");
 const { commandKeyOf } = require("./cloudUpdateInterceptor");
 const auditWriter = require("./auditWriter");
@@ -59,6 +60,9 @@ const REFRESH_STAGGER_MS = 250;
 
 // 模块级: 重扫定时器只启动一次
 let rescanStarted = false;
+// 模块级: 通道表解析失败只告警一次。解析会随每次窗口 init 和 15s 重扫反复重试,
+// 不去重的话真机日志一晚能刷出 5000+ 行相同的 warn。
+let channelMapWarned = false;
 
 /**
  * 取客户端来源标识 (WS host / URL), 写入审计记录的 source 字段。
@@ -468,8 +472,10 @@ const hookFunc = (central) => {
       console.log(
         `[HugoAura / WsAuditTap] Channel map resolved: ${Object.keys(map).length} channels.`
       );
-    } else {
-      // 理论上不会发生 (模块 0/174 都含通道表); 留诊断便于真机排查
+    } else if (!channelMapWarned) {
+      // 理论上不会发生 (模块 0/174 都含通道表); 留诊断便于真机排查。
+      // 只告警一次: 后续重试仍在进行, 但不再刷屏。
+      channelMapWarned = true;
       console.warn(
         `[HugoAura / WsAuditTap] Channel map unavailable (${tried.join(" | ")}); 通道名将退化为 URL 最后一段。`
       );

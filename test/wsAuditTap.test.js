@@ -3,6 +3,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert");
+const path = require("path");
 
 const tap = require("../src/aura/mainProcess/hooks/wsAuditTap.js");
 
@@ -424,4 +425,50 @@ test("installAll: 错峰重连, 第二个客户端延迟 REFRESH_STAGGER_MS", ()
   } finally {
     global.setTimeout = origSetTimeout;
   }
+});
+
+test("hookFunc: 通道表解析失败只告警一次, 重扫/重试不再刷屏", (t) => {
+  t.mock.method(console, "log", () => {});
+  t.mock.method(console, "error", () => {});
+  const warnings = [];
+  t.mock.method(console, "warn", (...args) => {
+    const line = args.map(String).join(" ");
+    if (line.includes("Channel map unavailable")) warnings.push(line);
+  });
+  t.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
+
+  global.__HUGO_AURA_CONFIG_MGR__ = {
+    loadConfig: () => ({
+      auraSettings: { cloudCommandAudit: { enabled: true } },
+    }),
+  };
+
+  // electron (模块 1) 可用; 0/174 (通道表) 按真机 webpack 行为抛 MODULE_NOT_FOUND。
+  // 真机 v0.3.1 上这段场景一晚刷了 5000+ 行相同告警。
+  const central = (id) => {
+    if (id === 1) return {};
+    const err = new Error(`Cannot find module '${id}'`);
+    err.code = "MODULE_NOT_FOUND";
+    throw err;
+  };
+  central.c = { 59: { i: 59, exports: new FakeWs({ label: "SmartPen" }) } };
+  central.m = {};
+
+  // 重新加载模块, 拿到独立的模块级告警去重状态
+  const tapModulePath = path.resolve(
+    __dirname,
+    "../src/aura/mainProcess/hooks/wsAuditTap.js"
+  );
+  delete require.cache[tapModulePath];
+  const freshTap = require("../src/aura/mainProcess/hooks/wsAuditTap.js");
+  freshTap.hookFunc(central);
+
+  assert.strictEqual(warnings.length, 1);
+  // resolveModule 已正确导入: 模块号缺失被吞掉返回 undefined (0 条),
+  // 而不是 v0.3.1 的 "抛错 resolveModule is not defined"
+  assert.ok(warnings[0].includes("模块 0: 0 条"));
+
+  // 15s 重扫若干轮 + withRetry 排定的重试, 都不再追加告警
+  t.mock.timers.tick(60000);
+  assert.strictEqual(warnings.length, 1);
 });

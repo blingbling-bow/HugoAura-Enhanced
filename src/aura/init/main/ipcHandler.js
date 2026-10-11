@@ -8,9 +8,17 @@ const flushPendingMessages = (windowKey) => {
   const pending = global.__HUGO_AURA__.pendingIpcMessages?.get(windowKey);
   if (!pending || pending.length === 0) return;
 
-  const webContents = global.__HUGO_AURA__.hookedWindows
-    ?.get(windowKey)
-    ?.webContents;
+  let webContents = null;
+  try {
+    webContents =
+      global.__HUGO_AURA__.hookedWindows?.get(windowKey)?.webContents || null;
+  } catch (err) {
+    // hookedWindows 混有真实 BrowserWindow (auraWsKeepAlive): 窗口销毁后
+    // 访问 .webContents getter 会抛 "Object has been destroyed", 视为窗口已不在
+    global.__HUGO_AURA__.hookedWindows?.delete(windowKey);
+    global.__HUGO_AURA__.pendingIpcMessages.delete(windowKey);
+    return;
+  }
   if (!webContents) return;
 
   global.__HUGO_AURA__.pendingIpcMessages.delete(windowKey);
@@ -56,14 +64,32 @@ const buildIpcMain = (electron) => {
     }
 
     const sendDataToWebContents = (key, chan, targetData) => {
-      const webContents =
-        // @ts-expect-error
-        global.__HUGO_AURA__.hookedWindows.get(key)?.webContents;
+      let webContents = null;
+      try {
+        webContents =
+          // @ts-expect-error
+          global.__HUGO_AURA__.hookedWindows.get(key)?.webContents || null;
+      } catch (err) {
+        // hookedWindows 混有真实 BrowserWindow (auraWsKeepAlive): 窗口销毁后
+        // .webContents getter 会抛 "Object has been destroyed"。清掉失效条目并
+        // 静默放弃本次推送 (审计记录本身已落盘, 推送只负责实时刷新 UI)。
+        global.__HUGO_AURA__.hookedWindows.delete(key);
+        return {
+          success: false,
+        };
+      }
 
       if (!webContents) {
         console.error(
           `[HugoAura / Main / IPC / ERROR] Failed sending data to ${key}: WebContents not found`
         );
+        return {
+          success: false,
+        };
+      }
+
+      if (webContents.isDestroyed()) {
+        // 渲染进程已销毁但条目尚未被 RDH 清理: 只跳过, 不抛错
         return {
           success: false,
         };

@@ -442,12 +442,12 @@ const authSettings = [
         type: "switch",
         name: "禁止开机自动锁屏",
         description:
-          "部分学校会设置开机即自动锁屏。启用后, 程序启动后一段时间内 (默认 90 秒, 可在配置文件 auraSettings.preventBootLock.graceSeconds 调整) 到达的锁屏指令会被拦截并代为上报锁屏回执, 集控端仍显示已锁屏; 窗口期结束后锁屏功能照常可用",
+          "部分学校会设置开机即自动锁屏 (实测走的是管家本地 \"下课锁屏\" 流程, 而非云端指令)。启用后, 管家启动后一段时间内 (默认 90 秒, 可在配置文件 auraSettings.preventBootLock.graceSeconds 调整) 云端锁屏指令会被拦截并代为上报锁屏回执, 管家本地的锁屏调用会被直接跳过; 窗口期结束后锁屏功能照常可用",
         restart: false,
         reload: false,
         tip: true,
         tipTitle:
-          "判定依据: 系统开机时长。锁屏指令到达时若开机未超过窗口期, 拦截指令并伪造锁屏回执; 若回执通道不可用则放行真实锁屏 (与集控端保持一致)。窗口期内本地与云端的锁屏都会被拦, 之后完全不影响",
+          "判定依据: 管家启动时长。窗口期内云端锁屏指令被拦截并伪造锁屏回执 (与集控端保持一致), 本地锁屏调用 (userLock, 实测开机自动锁屏的实际触发路径) 被直接吞掉; 回执通道不可用时云端路径放行真实锁屏 (fail-closed)。窗口期内的手动锁屏也会被拦, 之后完全不影响",
         associateVal: ["auraSettings.preventBootLock.enabled"],
         auraIf: () => true,
         defaultValue: false,

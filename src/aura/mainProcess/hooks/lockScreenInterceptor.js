@@ -43,9 +43,15 @@
  *
  * 注意:
  *   - 本地 "锁屏" 按钮走 IPC 通道 (windowMessage → startLockScreen,
- *     模块 375 → 模块 33.userLock()), 不经过 onMessage, 因此不受影响。
- *     本地锁屏会由管家自身再上报一条 operationLogId 为 "0" 的锁屏回执
- *     (startLockTask 内无条件调用模块 310), 与正常用户手动锁屏一致, 不干预。
+ *     模块 375 → 模块 33.userLock()), 不经过 onMessage。窗口期外的手动锁屏
+ *     完全不干预; 本地锁屏会由管家自身再上报一条 operationLogId 为 "0" 的
+ *     锁屏回执 (startLockTask 内无条件调用模块 310), 与正常手动锁屏一致。
+ *   - 真机取证 (v0.3.1, 2026-10-07 日志): 开机自动锁屏恰恰走的就是这条
+ *     本地路径 (堆栈: userLock → startLockTask), 全程无云端 1211 指令 ——
+ *     管家 "下课锁屏" 流程 (fastToolbar → Service_User_Finish_Class +
+ *     Service_User_Logout + startLockScreen) 在启动后自动触发。因此
+ *     preventBootLock 除拦 WS 指令外, 还须在开机窗口期内吞掉 userLock()
+ *     调用 (handleBootLocalLock), 只拦 onMessage 的旧版实现永远拦不到它。
  *   - messageType 1211 / screenLockStatus 0 为解锁指令, 在有锁时直接放行,
  *     以免设备被锁后无法解锁。
  *
@@ -207,8 +213,11 @@ const hookFn = (central, deps = {}) => {
   };
 
   // >>> 开机锁屏保护 (禁止开机自动锁屏) <<<
-  // 部分学校会设置开机即自动锁屏。窗口期内 (默认开机后 10 分钟) 到达的
-  // 锁屏指令按"拦截 + 伪造锁屏回执"处理, 与集控端保持状态一致;
+  // 部分学校会设置开机即自动锁屏。开机窗口期内 (默认 90 秒, 可配) 两条
+  // 锁屏路径都会被拦:
+  //   - 云端路径: WS 1211 指令 → 拦截 + 伪造锁屏回执 (与集控端保持一致);
+  //   - 本地路径: userLock() ("下课锁屏"流程, 真机取证的实际触发路径) →
+  //     直接吞掉, 无回执语义。
   // 窗口期结束后完全不介入, 锁屏功能照常可用。
   const getBootGuardConfig = () => {
     const config = readConfig();
@@ -218,6 +227,16 @@ const hookFn = (central, deps = {}) => {
     const seconds = Number(cfg.graceSeconds);
     const graceSeconds = Number.isFinite(seconds) && seconds > 0 ? seconds : 90;
     return { graceSeconds };
+  };
+
+  // 开机保护窗口是否仍有效 (云端/本地两条路径共用的判定)
+  const isBootGuardActive = () => {
+    const bootCfg = getBootGuardConfig();
+    if (!bootCfg) return false;
+    return isWithinBootGrace({
+      elapsedMs: getElapsedMs(),
+      graceMs: bootCfg.graceSeconds * 1000,
+    });
   };
 
   // 仅拦截锁屏指令 (screenLockStatus === 1); 解锁指令 (0) 放行
@@ -417,6 +436,44 @@ const hookFn = (central, deps = {}) => {
   };
 
   /**
+   * 开机自动锁屏拦截 —— 本地路径 (userLock)。
+   *
+   * 真机取证: 开机自动锁屏不经过 WS 1211 指令, 而是模块 375 "锁屏并注销"
+   * 流程直接调用 userLock() → startLockTask(true), 全程无云端指令
+   * (2026-10-07 日志堆栈, 且无任何 LockScreen 拦截/检测日志)。
+   *
+   * 本地锁屏没有云端指令与 operationLogId, 不存在"回执"语义: 窗口期内直接
+   * 吞掉调用即可, 不伪造回执。窗口期外的手动 "下课锁屏" 不受任何影响。
+   */
+  const handleBootLocalLock = () => {
+    const record = {
+      ts: new Date().toISOString(),
+      source: "local",
+      channel: "screenLockController",
+      url: "local:userLock",
+      action: "blocked",
+      mode: "bootGuard",
+      bootGuard: true,
+      data: null,
+      _logType: "lockScreen",
+    };
+    writeAudit(record);
+    pushAuditEvent(record);
+
+    // 提醒失败不影响拦截结果 (调用已吞掉)
+    try {
+      pushLockNotify(record);
+      alertWindow.showAlertWindow(electron, record);
+    } catch (err) {
+      console.error("[HugoAura / BootLock] Notify error:", err);
+    }
+
+    console.log(
+      "[HugoAura / BootLock] Blocked boot-time local lock-screen (userLock) within boot grace window."
+    );
+  };
+
+  /**
    * 处理一条锁屏/解锁指令
    * @param {any} handler 模块 33 实例
    * @param {any} parsed 已解析的消息对象
@@ -430,15 +487,10 @@ const hookFn = (central, deps = {}) => {
 
     const source = getWsSource();
 
-    // 开机锁屏保护: 独立于 lockScreenIntercept, 窗口期内拦截开机自动锁屏
-    if (isLock) {
-      const bootCfg = getBootGuardConfig();
-      if (bootCfg) {
-        const graceMs = bootCfg.graceSeconds * 1000;
-        if (isWithinBootGrace({ elapsedMs: getElapsedMs(), graceMs })) {
-          return handleBootAutoLock(parsed, source);
-        }
-      }
+    // 开机锁屏保护 (云端路径): 独立于 lockScreenIntercept, 窗口期内拦截;
+    // 本地路径 (userLock) 由 tryInstall 里的包装单独覆盖。
+    if (isLock && isBootGuardActive()) {
+      return handleBootAutoLock(parsed, source);
     }
 
     const cfg = getInterceptConfig();
@@ -582,6 +634,21 @@ const hookFn = (central, deps = {}) => {
     console.log(
       "[HugoAura / LockScreen] Source interception installed (module 33)."
     );
+
+    // 本地锁屏路径 (userLock): 真机取证开机自动锁屏走这条路径
+    // (模块 375 "锁屏并注销"流程 → userLock), 不经过 onMessage, 必须单独覆盖。
+    // 窗口期内吞掉调用并记审计; 窗口期外 / 功能关闭时原样放行。
+    if (typeof handler.userLock === "function") {
+      const originalUserLock = handler.userLock.bind(handler);
+      handler.userLock = (...args) => {
+        if (isBootGuardActive()) {
+          handleBootLocalLock();
+          return undefined;
+        }
+        return originalUserLock(...args);
+      };
+    }
+
     return true;
   };
 
