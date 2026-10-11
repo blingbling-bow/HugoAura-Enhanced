@@ -94,7 +94,7 @@
     },
     "preventBootLock": {
       "enabled": false,
-      "graceSeconds": 90
+      "graceSeconds": 30
     },
     "powerOffIntercept": {
       "enabled": false

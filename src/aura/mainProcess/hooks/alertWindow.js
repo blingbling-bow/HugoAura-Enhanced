@@ -71,6 +71,33 @@ const hasVisibleDomAlertWindow = (electron) => {
   return false;
 };
 
+/**
+ * 由拦截记录解析提醒小窗的展示内容 (纯函数, 便于单测)。
+ * 标题/时长逻辑与渲染层 (ui/js/global.js 的 showAlert) 保持同源:
+ *   锁屏 5 秒 (lockScreenInterceptor.NOTIFY_DELAY_MS, 延迟放行, 提示随之收起);
+ *   关机为立即阻止, 没有延迟, 提示停留 10 秒。改动时两处需同步。
+ * @param {{action?: string, source?: string, ts?: string, _logType?: string, bootGuard?: boolean}} record
+ *        与渲染层弹窗同源的拦截记录 (lockScreen / powerOff 拦截器构造)
+ * @returns {{title: string, type: "blocked" | "notify", durationMs: number}}
+ */
+const getAlertContent = (record) => {
+  const isLock = record._logType === "lockScreen";
+  const blocked = record.action === "blocked";
+  // bootGuard: 开机窗口期拦截走的是本地 "下课锁屏" 流程, 措辞区分于远程指令
+  const actionName = record.bootGuard
+    ? "开机自动锁屏"
+    : isLock
+      ? "远程锁屏"
+      : "远程关机";
+  // 延迟秒数须与渲染层弹窗 (ui/js/global.js showAlert) 保持一致
+  const delaySeconds = 5;
+  return {
+    title: blocked ? `已阻止${actionName}` : `即将在 ${delaySeconds} 秒后锁屏`,
+    type: blocked ? "blocked" : "notify",
+    durationMs: isLock ? 5000 : 10000,
+  };
+};
+
 const closeAlertWindow = () => {
   if (!currentAlertWindow) return;
   const win = currentAlertWindow;
@@ -94,15 +121,7 @@ const showAlertWindow = (electron, record) => {
     if (!electron || !electron.BrowserWindow || !record) return false;
     if (hasVisibleDomAlertWindow(electron)) return false;
 
-    const isLock = record._logType === "lockScreen";
-    const actionName = isLock ? "远程锁屏" : "远程关机";
-    const blocked = record.action === "blocked";
-    // 延迟秒数须与渲染层弹窗 (ui/js/global.js showAlert) 保持一致
-    const delaySeconds = 5;
-    const title = blocked
-      ? `已阻止${actionName}`
-      : `即将在 ${delaySeconds} 秒后锁屏`;
-    const durationMs = isLock ? 5000 : 10000;
+    const { title, type, durationMs } = getAlertContent(record);
 
     closeAlertWindow();
 
@@ -139,13 +158,15 @@ const showAlertWindow = (electron, record) => {
     });
 
     const query = {
+      // 页面侧会显式 decodeURIComponent 一次: 无论 Electron 把 % 再编码与否,
+      // "预编码一次 + 页面解两次" 都能得到原文 (修复提醒内容显示成 %E5.. 乱码)
       title: encodeURIComponent(title),
       meta: encodeURIComponent(
         `来源: ${record.source || "unknown"} · ${
           record.ts ? new Date(record.ts).toLocaleTimeString("zh-CN") : "-"
         }`
       ),
-      type: blocked ? "blocked" : "notify",
+      type,
       duration: String(durationMs),
     };
     win
@@ -176,4 +197,4 @@ const showAlertWindow = (electron, record) => {
   }
 };
 
-module.exports = { showAlertWindow, closeAlertWindow };
+module.exports = { showAlertWindow, closeAlertWindow, getAlertContent };

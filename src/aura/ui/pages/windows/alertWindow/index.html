@@ -82,8 +82,14 @@
         const iconEl = document.getElementById("icon");
         alertEl.className = `alert ${type}`;
         iconEl.textContent = type === "blocked" ? "\u{1F6E1}" : "\u26A0";
-        document.getElementById("title").textContent = params.get("title") || "";
-        document.getElementById("meta").textContent = params.get("meta") || "";
+        // 主进程侧 encodeURIComponent 预编码过一层; URLSearchParams 只解一层,
+        // 这里必须再显式解一次, 否则标题显示成 %E5.. 乱码
+        document.getElementById("title").textContent = decodeURIComponent(
+          params.get("title") || ""
+        );
+        document.getElementById("meta").textContent = decodeURIComponent(
+          params.get("meta") || ""
+        );
         document.getElementById("close").onclick = () => window.close();
         // 主进程超时会 destroy 窗口; 此处兜底, 防止定时器丢失导致窗体常驻
         const duration = Number(params.get("duration")) || 10000;

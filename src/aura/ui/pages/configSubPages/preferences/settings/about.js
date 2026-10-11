@@ -89,7 +89,7 @@ const FEATURES = [
   { done: true, text: "禁止希沃管家自动更新" },
   { done: true, text: "阻止远程关机" },
   { done: true, text: "阻止远程锁屏" },
-  { done: true, text: "禁止开机自动锁屏 (开机后 90 秒窗口期)" },
+  { done: true, text: "禁止开机自动锁屏 (开机后 30 秒窗口期, 本地+云端双路径)" },
   { done: true, text: "指令审计 (全通道云端指令留痕 / 未知指令高亮 / 导出 JSONL)" },
   { done: false, text: "Aura 代理层服务 (篡改上报数据 / 欺骗冰冻状态)" },
   { done: false, text: "窥屏提醒 (检测方式在部分环境无法识别窥屏进程, 当前版本已停用)" },

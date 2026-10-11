@@ -148,11 +148,16 @@
     const showAlert = (data) => {
       hideAlert();
 
-      const { action, source, ts, _logType } = data;
+      const { action, source, ts, _logType, bootGuard } = data;
       const blocked = action === "blocked";
       const isLock = _logType === "lockScreen";
       // 关机只有"阻止"一种结果 (不再提供仅提醒的放行模式), 锁屏仍有延迟放行
-      const actionName = isLock ? "远程锁屏" : "远程关机";
+      // bootGuard: 开机窗口期拦截走的是本地 "下课锁屏" 流程, 措辞区分于远程指令
+      const actionName = bootGuard
+        ? "开机自动锁屏"
+        : isLock
+          ? "远程锁屏"
+          : "远程关机";
       const time = new Date(ts).toLocaleTimeString("zh-CN");
       const color = blocked
         ? { bg: "#f8d7da", border: "#dc3545", text: "#721c24" }

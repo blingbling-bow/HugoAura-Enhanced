@@ -112,6 +112,13 @@ test("窗口期内: 锁屏指令被拦截并伪造锁屏回执, 不进入真实�
     assert.strictEqual(env.lockFeedbackCalls[0].status, 1);
     assert.strictEqual(env.lockFeedbackCalls[0].operationLogId, "100");
     assert.strictEqual(env.originalCalls.length, 0, "真实锁屏逻辑不应被执行");
+    // 静默拦截: 不弹提醒
+    assert.strictEqual(
+      env.pushedRecords.filter((p) => p.channel === "$aura.lockScreen.onBlocked")
+        .length,
+      0,
+      "开机拦截不应推送提醒"
+    );
   } finally {
     env.cleanup();
   }
@@ -192,6 +199,13 @@ test("窗口期内: 本地 userLock (下课锁屏流程) 被吞掉并记审计",
     assert.strictEqual(pushed[0].data.record.action, "blocked");
     // 本地路径无云端指令, 不伪造回执
     assert.strictEqual(env.lockFeedbackCalls.length, 0);
+    // 静默拦截: 不弹提醒
+    assert.strictEqual(
+      env.pushedRecords.filter((p) => p.channel === "$aura.lockScreen.onBlocked")
+        .length,
+      0,
+      "开机拦截不应推送提醒"
+    );
   } finally {
     env.cleanup();
   }
@@ -219,6 +233,51 @@ test("功能关闭时: 本地 userLock 照常执行", () => {
     assert.strictEqual(env.pushedRecords.length, 0);
   } finally {
     env.cleanup();
+  }
+});
+
+test("未配置 graceSeconds 时默认窗口为 30 秒", () => {
+  // makeEnv 只覆盖 enabled/graceSeconds 两个字段, 这里直接构造
+  // 缺 graceSeconds 的配置验证代码内回退值
+  const state = { elapsedMs: 0 };
+  const userLockCalls = [];
+  const handler = Object.create({
+    onMessage(e) {
+      this.calls.push(e);
+    },
+  });
+  handler.message = null;
+  handler.windows = [];
+  // 结构特征自检要求 startLockTask / userLock / stopLockTask 同时存在
+  handler.startLockTask = () => {};
+  handler.userLock = () => userLockCalls.push(1);
+  handler.stopLockTask = () => {};
+
+  const central = (id) =>
+    ({
+      1: { ipcMain: { send() {} } },
+      33: handler,
+      310: () => true,
+      311: () => true,
+    })[id];
+  global.__HUGO_AURA_CONFIG_MGR__ = {
+    loadConfig: () => ({
+      auraSettings: { preventBootLock: { enabled: true } },
+    }),
+  };
+
+  try {
+    lockScreen.hookFunc(central, { getElapsedMs: () => state.elapsedMs });
+
+    state.elapsedMs = 29 * SECOND_MS;
+    handler.userLock();
+    assert.strictEqual(userLockCalls.length, 0, "29 秒仍在默认窗口内");
+
+    state.elapsedMs = 31 * SECOND_MS;
+    handler.userLock();
+    assert.strictEqual(userLockCalls.length, 1, "31 秒已超出默认窗口");
+  } finally {
+    delete global.__HUGO_AURA_CONFIG_MGR__;
   }
 });
 

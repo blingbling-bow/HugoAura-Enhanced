@@ -213,11 +213,12 @@ const hookFn = (central, deps = {}) => {
   };
 
   // >>> 开机锁屏保护 (禁止开机自动锁屏) <<<
-  // 部分学校会设置开机即自动锁屏。开机窗口期内 (默认 90 秒, 可配) 两条
+  // 部分学校会设置开机即自动锁屏。开机窗口期内 (默认 30 秒, 可配) 两条
   // 锁屏路径都会被拦:
   //   - 云端路径: WS 1211 指令 → 拦截 + 伪造锁屏回执 (与集控端保持一致);
   //   - 本地路径: userLock() ("下课锁屏"流程, 真机取证的实际触发路径) →
   //     直接吞掉, 无回执语义。
+  // 两条路径均为静默拦截 (不弹提醒, 隐蔽优先), 仅审计留痕供指令审计页查询。
   // 窗口期结束后完全不介入, 锁屏功能照常可用。
   const getBootGuardConfig = () => {
     const config = readConfig();
@@ -225,7 +226,7 @@ const hookFn = (central, deps = {}) => {
       config && config.auraSettings && config.auraSettings.preventBootLock;
     if (!cfg || !cfg.enabled) return null;
     const seconds = Number(cfg.graceSeconds);
-    const graceSeconds = Number.isFinite(seconds) && seconds > 0 ? seconds : 90;
+    const graceSeconds = Number.isFinite(seconds) && seconds > 0 ? seconds : 30;
     return { graceSeconds };
   };
 
@@ -421,14 +422,7 @@ const hookFn = (central, deps = {}) => {
       return false;
     }
 
-    // 提醒失败不影响拦截结果 (吞掉指令已经生效)
-    try {
-      pushLockNotify(record);
-      alertWindow.showAlertWindow(electron, record);
-    } catch (err) {
-      console.error("[HugoAura / BootLock] Notify error:", err);
-    }
-
+    // 静默拦截: 开机保护不弹提醒 (隐蔽优先), 仅审计留痕, 指令审计页可查
     console.log(
       `[HugoAura / BootLock] Blocked boot-time auto lock-screen from ${source} (within boot grace window).`
     );
@@ -460,14 +454,7 @@ const hookFn = (central, deps = {}) => {
     writeAudit(record);
     pushAuditEvent(record);
 
-    // 提醒失败不影响拦截结果 (调用已吞掉)
-    try {
-      pushLockNotify(record);
-      alertWindow.showAlertWindow(electron, record);
-    } catch (err) {
-      console.error("[HugoAura / BootLock] Notify error:", err);
-    }
-
+    // 静默拦截: 开机保护不弹提醒 (隐蔽优先), 仅审计留痕, 指令审计页可查
     console.log(
       "[HugoAura / BootLock] Blocked boot-time local lock-screen (userLock) within boot grace window."
     );
