@@ -3,7 +3,7 @@
 const crypto = require("crypto");
 
 const PREFIX = "pbkdf2:v1:";
-const ITERATIONS = 210000;
+const ITERATIONS = 600000;
 const KEY_LENGTH = 32;
 const DIGEST = "sha256";
 const SALT_LENGTH = 16;
@@ -55,9 +55,10 @@ const verifyPassword = (password, stored, legacySalt = "EndlessX") => {
         return { valid: false, needsUpgrade: false };
       }
       const actual = crypto.pbkdf2Sync(password, salt, iterations, KEY_LENGTH, DIGEST);
+      const valid = crypto.timingSafeEqual(actual, expected);
       return {
-        valid: crypto.timingSafeEqual(actual, expected),
-        needsUpgrade: false,
+        valid,
+        needsUpgrade: valid && iterations < ITERATIONS,
       };
     } catch {
       return { valid: false, needsUpgrade: false };
