@@ -1,0 +1,27 @@
+{
+  "_readme": "HugoAura 插件市场清单 (随 aura 包内置, 同时作为仓库在线清单)。运行时市场源顺序: jsDelivr (@dev 分支) → raw.githubusercontent → 包内本地文件 (离线兜底)。本文件位于 src/aura/market/, 打包后位于 <aura 安装目录>/market/; 新增插件时把 zip 放入 packages/ 并在此登记。downloadUrl 在线源必须是可直连的 http(s) 直链, homepage 必须是 https; 本地兜底模式下安装走包内 packages/ 目录。version 与包内 manifest.json 保持一致, 覆盖安装时低于已装版本会被拒绝。",
+  "version": 1,
+  "updatedAt": "2026-10-18",
+  "items": [
+    {
+      "id": "com.aura.test.main",
+      "name": "Aura 测试插件 (主进程)",
+      "version": "1.1.0",
+      "author": "HugoAura",
+      "description": "验证主进程插件运行时: 配置读取 / 存储目录写入 / 事件总线订阅 / 设置项读写 / 心跳存活 / 卸载清理。启用后每 60 秒输出一条心跳日志。",
+      "type": "main",
+      "homepage": "https://github.com/blingbling-bow/HugoAura-Enhanced",
+      "downloadUrl": "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Enhanced@dev/src/aura/market/packages/aura-test-main.zip"
+    },
+    {
+      "id": "com.aura.test.ui",
+      "name": "Aura 测试插件 (界面)",
+      "version": "1.0.0",
+      "author": "HugoAura",
+      "description": "验证渲染层插件运行时: 在注入页面左下角显示加载徽章, 点击徽章测试 IPC 调用 (列出已装插件数量)。停用后下次页面注入时消失。",
+      "type": "ui",
+      "homepage": "https://github.com/blingbling-bow/HugoAura-Enhanced",
+      "downloadUrl": "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Enhanced@dev/src/aura/market/packages/aura-test-ui.zip"
+    }
+  ]
+}
