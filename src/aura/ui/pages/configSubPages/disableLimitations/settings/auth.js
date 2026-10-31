@@ -447,7 +447,7 @@ const authSettings = [
         reload: false,
         tip: true,
         tipTitle:
-          "判定依据: 管家启动时长。窗口期内云端锁屏指令被拦截并伪造锁屏回执 (与集控端保持一致), 本地锁屏调用 (userLock, 实测开机自动锁屏的实际触发路径) 被直接吞掉; 回执通道不可用时云端路径放行真实锁屏 (fail-closed)。拦截静默进行, 不弹任何提醒, 拦截记录可在指令审计页查看; 窗口期内的手动锁屏也会被拦, 之后完全不影响",
+          "判定依据: 管家启动时长。窗口期内云端锁屏指令被拦截并伪造锁屏回执 (与集控端保持一致), 本地锁屏调用 (userLock, 实测开机自动锁屏的实际触发路径) 被直接吞掉; 回执通道不可用时云端路径放行真实锁屏 (fail-closed)。每次拦截会把保护窗口向后延长 5 分钟 (集控端可能在窗口过期后重推锁屏指令); 任何解锁指令会立即结束保护, 之后云端锁屏照常 (含提醒)。拦截静默进行, 不弹任何提醒, 拦截记录可在指令审计页查看",
         associateVal: ["auraSettings.preventBootLock.enabled"],
         auraIf: () => true,
         defaultValue: false,
@@ -570,6 +570,68 @@ const authSettings = [
         callbackFn: (newVal) => {
           if (typeof newVal !== "boolean") return;
           global.__HUGO_AURA_CONFIG__.auraSettings.fakeScreenSaverState = newVal;
+        },
+      },
+      {
+        index: 2,
+        id: "customScreenSaverImages",
+        type: "switch",
+        name: "自定义屏保图片",
+        description:
+          "把屏保播放的图片替换为自备图片: 先将 jpg / png 图片放入 HugoAura 数据目录下的 screensaver 文件夹, 再开启本项。首次开启会自动备份原图, 关闭时自动还原",
+        restart: false,
+        reload: false,
+        tip: true,
+        tipTitle:
+          "原理: 屏保画面由 SeewoAbility 渲染, 固定读取 %APPDATA%\\seewo\\SeewoAbility\\screen_saver 目录, 本功能将自备图循环覆盖到该目录 (保留原文件名)。多张图会按顺序循环使用; 请保持 \"禁用屏幕保护\" 为关闭状态, 否则屏保不会播放",
+        warning: true,
+        warningContent:
+          "屏保图可能随管家/希沃组件更新被重置, 重启管家后本功能会自动重新应用",
+        associateVal: null,
+        auraIf: () => true,
+        defaultValue: false,
+        valueGetter: () => {
+          return Boolean(
+            global.__HUGO_AURA_CONFIG__.auraSettings.customScreenSaver
+              ? global.__HUGO_AURA_CONFIG__.auraSettings.customScreenSaver
+                  .enabled
+              : false
+          );
+        },
+        callbackFn: async (newVal, el) => {
+          if (typeof newVal !== "boolean") return;
+          global.__HUGO_AURA_CONFIG__.auraSettings.customScreenSaver.enabled =
+            newVal;
+          try {
+            const res = await ipcRenderer.invoke(
+              newVal ? "$aura.screensaver.apply" : "$aura.screensaver.restore"
+            );
+            if (!res || !res.success) {
+              // 失败回拨开关, 避免状态与实际不符
+              el.checked = !newVal;
+              global.__HUGO_AURA_CONFIG__.auraSettings.customScreenSaver.enabled =
+                !newVal;
+              const hint =
+                newVal && res && res.error === "NO_SOURCE_IMAGES"
+                  ? "未在 HugoAura 数据目录的 screensaver 文件夹找到图片 (仅支持 jpg / png)"
+                  : newVal && res && res.error === "TARGET_DIR_NOT_FOUND"
+                    ? "找不到希沃屏保目录 (SeewoAbility 尚未生成), 请先运行一次屏保后重试"
+                    : `操作失败: ${(res && res.error) || "未知错误"}`;
+              console.error(`[HugoAura / CustomScreenSaver] ${hint}`);
+              const acsnMainContentEl = document.getElementsByClassName(
+                "acp-config-status-notify-main-content"
+              )[0];
+              if (acsnMainContentEl) {
+                acsnMainContentEl.textContent = hint;
+                global.__HUGO_AURA_UI_FUNCTIONS__.config.handleACSNShow();
+              }
+            }
+          } catch (err) {
+            el.checked = !newVal;
+            global.__HUGO_AURA_CONFIG__.auraSettings.customScreenSaver.enabled =
+              !newVal;
+            console.error("[HugoAura / CustomScreenSaver] IPC failed:", err);
+          }
         },
       },
     ],

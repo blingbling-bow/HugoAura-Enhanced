@@ -79,6 +79,9 @@
     "encryptConfig": false,
     "disableScreenSaver": false,
     "fakeScreenSaverState": true,
+    "customScreenSaver": {
+      "enabled": false
+    },
     "disableWindowTopmost": false,
     "disableUpdate": false,
     "cloudUpdateIntercept": {
@@ -112,6 +115,11 @@
     },
     "unlockAudit": {
       "enabled": false
+    },
+    "plugins": {
+      "enabled": {},
+      "permissions": {},
+      "meta": {}
     },
     "appearance": {
       "appBar": {

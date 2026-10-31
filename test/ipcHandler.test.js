@@ -20,6 +20,8 @@ const IPC_MODULE_STUBS = [
   "aikariIpcHandler",
   "auditIpcHandler",
   "auraUpdateIpcHandler",
+  "pluginIpcHandler",
+  "screensaverIpcHandler",
 ];
 
 /**
