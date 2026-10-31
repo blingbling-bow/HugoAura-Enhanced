@@ -188,7 +188,7 @@ const showAlertWindow = (electron, record) => {
     if (typeof destroyTimer.unref === "function") destroyTimer.unref();
 
     console.log(
-      `[HugoAura / AlertWindow] Standalone alert shown (${blocked ? "blocked" : "notify"}, ${durationMs}ms).`
+      `[HugoAura / AlertWindow] Standalone alert shown (${type === "blocked" ? "blocked" : "notify"}, ${durationMs}ms).`
     );
     return true;
   } catch (err) {

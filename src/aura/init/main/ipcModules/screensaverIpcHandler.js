@@ -11,7 +11,7 @@ const applyScreensaverIpcHandler = (ipcMain) => {
   const {
     applyCustomScreenSaver,
     restoreScreenSaver,
-  } = require("../../mainProcess/hooks/customScreenSaver");
+  } = require("../../../mainProcess/hooks/customScreenSaver");
 
   ipcMain.handle(`${methodBase}.apply`, async (_event, _arg) => {
     try {

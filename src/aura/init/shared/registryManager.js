@@ -105,6 +105,10 @@ class RegistryManager {
    * @returns {boolean}
    */
   initRegistrySync() {
+    // 进程内缓存: 该检查与注册表键是否存在绑定, 成功后无需每次重新
+    // 同步拉起 reg.exe (加密模式下 encryptConfig 每次写入都会调用,
+    // 真机上每次都是一个同步子进程, 是加密模式卡顿的热点之一)。
+    if (this.initRegistrySyncOk) return true;
     try {
       const queryResult = execSync(
         ["reg", "query", AURA_REGISTRY_PATH].join(" "),
@@ -112,6 +116,7 @@ class RegistryManager {
       );
 
       if (queryResult) {
+        this.initRegistrySyncOk = true;
         console.log(`${LOG_PREFIX}] Registry check up success.`);
         console.debug(`${LOG_PREFIX}] Command stdout:`, queryResult);
         return true;
@@ -120,7 +125,9 @@ class RegistryManager {
       }
     } catch (e) {
       console.warn(`${LOG_PREFIX} / WARN] Failed to query registry, error:`, e);
-      return this.handleCreateRegSync(AURA_REGISTRY_PATH);
+      const created = this.handleCreateRegSync(AURA_REGISTRY_PATH);
+      if (created) this.initRegistrySyncOk = true;
+      return created;
     }
   }
 

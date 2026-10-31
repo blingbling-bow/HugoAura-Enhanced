@@ -192,6 +192,15 @@ class ConfigManager {
     this.isConfigReadFailed = false;
     this.side = "unknown";
 
+    // >>> 加密模式性能缓存 (真机热点: 钩子按云端消息粒度 loadConfig) <<<
+    // 解密口令缓存: 键 = 注册表 LMAK_Value 原文, 命中则免去同步 PowerShell
+    // DPAPI 子进程; 解密配置缓存: 键 = .dat 文件指纹 (大小+mtimeMs),
+    // 命中则免去 PBKDF2(100k)+AES 全量解密。每次解密结果以深拷贝返回,
+    // 与未加密路径"每次全新对象"的语义保持一致。
+    this.encPasswordCache = null; // { registryValue, password } | null
+    this.decConfigCache = null; // { stamp, config } | null
+    this.defaultConfigCache = null; // default.json 解析结果 (安装期内不变)
+
     if (fs.existsSync(this.encConfigPath)) {
       this.useEncConfig = true;
     } else {
@@ -260,12 +269,26 @@ class ConfigManager {
 
   getDefaultConfig() {
     try {
-      return JSON.parse(fs.readFileSync(this.defaultConfigPath, "utf8"));
+      // default.json 安装期内不变, 解析结果进程内缓存
+      if (this.defaultConfigCache) return this.defaultConfigCache;
+      const parsed = JSON.parse(fs.readFileSync(this.defaultConfigPath, "utf8"));
+      this.defaultConfigCache = parsed;
+      return parsed;
     } catch (err) {
       console.warn(
         "[HugoAura / Config] No default config found, using empty config"
       );
       return { rewrite: {} };
+    }
+  }
+
+  /** 加密配置 .dat 的文件指纹 (大小+mtimeMs); 文件不存在返回 null */
+  getEncConfigStamp() {
+    try {
+      const st = fs.statSync(this.encConfigPath);
+      return `${st.size}:${st.mtimeMs}`;
+    } catch {
+      return null;
     }
   }
 
@@ -290,11 +313,27 @@ class ConfigManager {
       if (this.useEncConfig) {
         const hashedPasswdResultObj = this.retrieveEncPassword();
         if (hashedPasswdResultObj.success && hashedPasswdResultObj.data) {
+          // 文件指纹缓存: .dat 未变化时直接返回缓存配置的深拷贝,
+          // 免去 PBKDF2(100k)+AES 全量解密 (钩子按消息粒度高频调用)
+          const stamp = this.getEncConfigStamp();
+          if (
+            stamp !== null &&
+            this.decConfigCache &&
+            this.decConfigCache.stamp === stamp
+          ) {
+            return JSON.parse(JSON.stringify(this.decConfigCache.config));
+          }
+
           config = this.decryptConfig(hashedPasswdResultObj.data).data;
 
           if (!config) {
             this.isConfigReadFailed = true;
             return this.getDefaultConfig(); // should be changed, too
+          }
+
+          const stampAfter = this.getEncConfigStamp();
+          if (stampAfter !== null) {
+            this.decConfigCache = { stamp: stampAfter, config };
           }
         } else {
           console.error(
@@ -456,16 +495,22 @@ class ConfigManager {
    */
   async saveEncPassword(password) {
     if (process.platform !== "win32") {
-      return saveLegacyEncPassword(this, password);
+      const saved = await saveLegacyEncPassword(this, password);
+      // legacy 分支拿不到写回的密文原文, 直接失效缓存 (下次读取重算一次)
+      this.encPasswordCache = null;
+      return saved;
     }
     const encrypted = await runDpapi(Buffer.from(password, "utf8"), true);
+    const registryValue = LMAK_DPAPI_PREFIX + encrypted.toString("base64");
     const saved = await registryManager.createOrUpdateRegKey(
       LMAK_SETTINGS_BASE,
       "LMAK_Value",
-      LMAK_DPAPI_PREFIX + encrypted.toString("base64"),
+      registryValue,
       true
     );
     if (!saved.success) throw new Error("Failed to persist protected credential");
+    // 口令缓存直接命中写回值, 后续 retrieve 不再拉起 PowerShell
+    this.encPasswordCache = { registryValue, password };
     return true;
   }
 
@@ -474,10 +519,20 @@ class ConfigManager {
       const encPasswdHex = registryManager.readRegKeySync(
         LMAK_SETTINGS_BASE, "LMAK_Value", true
       )?.data;
+
+      // 口令缓存命中: 免去同步 PowerShell DPAPI 子进程 (真机卡顿主热点)
+      if (
+        this.encPasswordCache &&
+        this.encPasswordCache.registryValue === encPasswdHex
+      ) {
+        return { success: true, data: this.encPasswordCache.password };
+      }
+
       if (encPasswdHex?.startsWith(LMAK_DPAPI_PREFIX)) {
         const encrypted = parseDpapiOutput(encPasswdHex.slice(LMAK_DPAPI_PREFIX.length));
         const data = runDpapiSync(encrypted, false).toString("utf8");
-        return { success: true, data, error: null };
+        this.encPasswordCache = { registryValue: encPasswdHex, password: data };
+        return { success: true, data };
       }
       const authTagHex = registryManager.readRegKeySync(
         LMAK_SETTINGS_BASE,
@@ -532,11 +587,14 @@ class ConfigManager {
       // Migrate legacy data to DPAPI only on Windows; retain it elsewhere.
       if (process.platform === "win32") {
         const encrypted = runDpapiSync(Buffer.from(result, "utf8"), true);
+        const migratedValue = LMAK_DPAPI_PREFIX + encrypted.toString("base64");
         const saved = registryManager.createOrUpdateRegKeySync(
-          LMAK_SETTINGS_BASE, "LMAK_Value",
-          LMAK_DPAPI_PREFIX + encrypted.toString("base64"), true
+          LMAK_SETTINGS_BASE, "LMAK_Value", migratedValue, true
         );
         if (!saved.success) throw new Error("Failed to migrate legacy credential");
+        this.encPasswordCache = { registryValue: migratedValue, password: result };
+      } else {
+        this.encPasswordCache = { registryValue: encPasswdHex, password: result };
       }
 
       return {
@@ -562,10 +620,20 @@ class ConfigManager {
       const encPasswdHex = (
         await registryManager.readRegKey(LMAK_SETTINGS_BASE, "LMAK_Value", true)
       ).data;
+
+      // 口令缓存命中: 免去 PowerShell DPAPI 子进程
+      if (
+        this.encPasswordCache &&
+        this.encPasswordCache.registryValue === encPasswdHex
+      ) {
+        return { success: true, data: this.encPasswordCache.password };
+      }
+
       if (encPasswdHex?.startsWith(LMAK_DPAPI_PREFIX)) {
         const encrypted = parseDpapiOutput(encPasswdHex.slice(LMAK_DPAPI_PREFIX.length));
         const data = (await runDpapi(encrypted, false)).toString("utf8");
-        return { success: true, data, error: null };
+        this.encPasswordCache = { registryValue: encPasswdHex, password: data };
+        return { success: true, data };
       }
       const authTagHex = (
         await registryManager.readRegKey(
@@ -637,6 +705,9 @@ class ConfigManager {
 
   async clearEncPasswdRegKey() {
     await registryManager.delRegKey(LMAK_SETTINGS_BASE, null);
+    // 注册表凭据已删除, 两级缓存全部失效
+    this.encPasswordCache = null;
+    this.decConfigCache = null;
   }
 
   /**
@@ -679,10 +750,21 @@ class ConfigManager {
 
     try {
       fs.writeFileSync(this.encConfigPath, base64EncConfig, "utf-8");
-      try {
-        fs.unlinkSync(this.configPath);
-      } catch {
-        console.debug("[HugoAura / Config] Dec config not exists, skipping...");
+      // 明文残留清理: 开启加密后, config.json 与它的崩溃备份 (.bak) /
+      // 半成品 (.tmp) 都必须删除, 否则明文配置一直留在盘上, 加密形同虚设
+      for (const leftover of [
+        this.configPath,
+        this.configPath + ".bak",
+        this.configPath + ".tmp",
+      ]) {
+        try {
+          if (fs.existsSync(leftover)) fs.unlinkSync(leftover);
+        } catch (err) {
+          console.warn(
+            `[HugoAura / Config] Failed to remove plaintext leftover (${leftover}):`,
+            err
+          );
+        }
       }
 
       if (!this.useEncConfig) this.useEncConfig = true;

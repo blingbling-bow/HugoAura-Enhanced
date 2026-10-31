@@ -137,3 +137,122 @@ test("non-Windows uses the legacy AES credential path", async () => {
   assert.equal((await manager.retrieveEncPasswordAsync()).data, password);
   assert.equal(manager.retrieveEncPassword().data, password);
 });
+
+/** DPAPI 功能探测: 当前环境不可用时相关用例跳过 (不引入新的常红用例) */
+let dpapiProbeResult = null;
+const dpapiAvailable = async () => {
+  if (dpapiProbeResult === null) {
+    try {
+      const { manager } = harness({});
+      await manager.saveEncPassword("probe");
+      dpapiProbeResult = true;
+    } catch {
+      dpapiProbeResult = false;
+    }
+  }
+  return dpapiProbeResult;
+};
+
+test("重复 retrieve 命中口令缓存, 不再拉起 DPAPI 子进程", windowsOnly, async (t) => {
+  if (!(await dpapiAvailable())) {
+    return t.skip("当前环境无法使用 DPAPI (缺 SystemRoot), 跳过");
+  }
+  let execFileCalls = 0;
+  const wrapped = { ...childProcess };
+  wrapped.execFile = (file, args, options, callback) => {
+    execFileCalls += 1;
+    return childProcess.execFile(file, args, options, callback);
+  };
+
+  // 实例 A: 保存凭据 (1 次 DPAPI protect), save 直接写入口令缓存
+  const a = harness({}, wrapped);
+  await a.manager.saveEncPassword(password);
+  assert.equal(execFileCalls, 1);
+  assert.equal(a.manager.retrieveEncPassword().data, password);
+  assert.equal(execFileCalls, 1, "保存后读取应命中 save 写入的缓存");
+
+  // 实例 B: 冷缓存 (模拟进程重启), 首次读取 1 次 unprotect, 之后命中
+  const b = harness(a.state.values, wrapped);
+  assert.equal(b.manager.retrieveEncPassword().data, password);
+  assert.equal(execFileCalls, 2);
+  assert.equal(b.manager.retrieveEncPassword().data, password);
+  assert.equal((await b.manager.retrieveEncPasswordAsync()).data, password);
+  assert.equal(execFileCalls, 2, "缓存命中不得再拉起 DPAPI");
+});
+
+test("saveEncPassword 后口令缓存立即指向新凭据", windowsOnly, async (t) => {
+  if (!(await dpapiAvailable())) {
+    return t.skip("当前环境无法使用 DPAPI (缺 SystemRoot), 跳过");
+  }
+  const { manager } = harness({});
+  await manager.saveEncPassword("first-password");
+  assert.equal(manager.retrieveEncPassword().data, "first-password");
+  await manager.saveEncPassword("second-password");
+  assert.equal(
+    manager.retrieveEncPassword().data,
+    "second-password",
+    "换密码后缓存必须指向新值"
+  );
+});
+
+test("加密配置读取命中解密缓存, 文件变化后失效", async () => {
+  const os = require("node:os");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "aura-dec-cache-"));
+  const { manager } = harness({});
+  manager.configPath = path.join(root, "config.json");
+  manager.encConfigPath = path.join(root, "enc.dat");
+  manager.useEncConfig = true;
+  // 实例桩: 口令与解密都不依赖 DPAPI, 专注验证文件指纹缓存语义
+  manager.retrieveEncPassword = () => ({ success: true, data: "unit-test-pw" });
+  let decryptCalls = 0;
+  manager.decryptConfig = () => {
+    decryptCalls += 1;
+    return { success: true, data: { hello: "world", nested: { v: 1 } } };
+  };
+
+  fs.writeFileSync(manager.encConfigPath, "blob-v1");
+  const first = manager.readConfig();
+  assert.equal(decryptCalls, 1);
+  assert.equal(
+    JSON.stringify(first),
+    JSON.stringify({ hello: "world", nested: { v: 1 } })
+  );
+
+  // 第二次读取: 文件指纹未变 → 命中缓存, 不再解密; 且返回深拷贝
+  const second = manager.readConfig();
+  assert.equal(decryptCalls, 1, "指纹未变不得重复解密");
+  // 注意: readConfig 在 vm harness 内执行, JSON.parse 产物是 vm realm 的
+  // 对象, 与宿主字面量原型不同, deepStrictEqual(跨 realm) 会误报,
+  // 这里用 JSON 字符串比较结构
+  assert.equal(JSON.stringify(second), JSON.stringify(first));
+  assert.notEqual(second, first, "缓存命中必须返回深拷贝");
+  second.hello = "mutated";
+  const third = manager.readConfig();
+  assert.equal(third.hello, "world", "调用方改动不得污染缓存");
+
+  // 文件变化 → 指纹失效 → 重新解密
+  fs.writeFileSync(manager.encConfigPath, "blob-v2-longer");
+  manager.readConfig();
+  assert.equal(decryptCalls, 2, "文件变化后必须重新解密");
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("legacy 路径: save 后 retrieve 一致 (save 使口令缓存失效重取)", async () => {
+  const { manager, state } = harness({}, childProcess, "linux");
+  manager.priv_getMacAddr = () => "AABBCCDDEEFF";
+  await manager.saveEncPassword(password);
+  assert.match(state.values.LMAK_Value, /^[0-9a-f]+$/i);
+  assert.equal((await manager.retrieveEncPasswordAsync()).data, password);
+  assert.equal(manager.retrieveEncPassword().data, password);
+});
+
+test("getDefaultConfig 命中解析缓存 (default.json 不重复读盘)", windowsOnly, () => {
+  const { manager } = harness({});
+  manager.defaultConfigPath = path.resolve(
+    __dirname, "../src/aura/init/shared/default.json"
+  );
+  const first = manager.getDefaultConfig();
+  const second = manager.getDefaultConfig();
+  assert.equal(first, second, "同一实例应返回缓存的同一对象");
+});
