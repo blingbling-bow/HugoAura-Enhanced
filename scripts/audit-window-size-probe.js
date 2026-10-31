@@ -1,5 +1,11 @@
 const fs = require("fs");
-const s = fs.readFileSync(process.argv[2] || "app_unpacked/main.js", "utf8");
+const path = require("path");
+const baseDir = process.cwd();
+const targetPath = path.resolve(baseDir, process.argv[2] || "app_unpacked/main.js");
+if (targetPath !== baseDir && !targetPath.startsWith(baseDir + path.sep)) {
+  throw new Error("Refusing to read path outside of working directory: " + targetPath);
+}
+const s = fs.readFileSync(targetPath, "utf8");
 const rad = Number(process.argv[3] || 220);
 
 const show = (p, max) => {
