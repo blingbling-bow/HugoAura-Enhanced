@@ -101,7 +101,10 @@ const pruneStaleStages = () => {
   for (const [stageId, stage] of stagedInstalls) {
     if (now - stage.createdAt > STAGE_TTL_MS) {
       try {
-        removePathRecursive(path.dirname(stage.dir));
+        // 只删除暂存目录本身 (mkdtemp 出来的独立目录)。
+        // 之前误写为 path.dirname(stage.dir) —— 那是整个用户临时目录,
+        // 递归删除会造成全系统临时文件丢失 (代码审查发现, P0)。
+        removePathRecursive(stage.dir);
       } catch (err) {
         console.warn("[HugoAura / Plugin] Failed to prune stale stage:", err);
       }
@@ -740,4 +743,9 @@ const applyPluginIpcHandler = (ipcMain) => {
   });
 };
 
-module.exports = { applyPluginIpcHandler };
+module.exports = {
+  applyPluginIpcHandler,
+  // 测试导出: 暂存清理与暂存表 (锁定 "只删暂存目录本身" 的回归语义)
+  pruneStaleStages,
+  stagedInstalls,
+};
