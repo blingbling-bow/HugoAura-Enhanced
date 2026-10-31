@@ -104,14 +104,23 @@ const applyBaseIpcHandler = (ipcMain) => {
   // >>> 自定义屏保图片 (Issue #15): IPC 注册 + 启动应用 <<<
   // 从 baseIpcHandler 装配 (而非 ipcHandler.js / hook.js): 这两个文件的插件
   // hunks 整体走插件分支, dev 分支不含插件代码时屏保功能同样完整可用。
-  const { applyScreensaverIpcHandler } = require("./screensaverIpcHandler");
-  const { applyIfEnabled } = require("../../../mainProcess/hooks/customScreenSaver");
-  applyScreensaverIpcHandler(ipcMain);
+  // 整段 try/catch 兜底: 单个 IPC 模块失败绝不能拖垮整个 buildIpcMain
+  // (否则 ipcInit 不置位, 同进程后续窗口重试时连环 second handler 崩溃)。
   try {
-    applyIfEnabled();
+    const { applyScreensaverIpcHandler } = require("./screensaverIpcHandler");
+    const { applyIfEnabled } = require("../../../mainProcess/hooks/customScreenSaver");
+    applyScreensaverIpcHandler(ipcMain);
+    try {
+      applyIfEnabled();
+    } catch (err) {
+      console.error(
+        "[HugoAura / Base] Custom screen saver startup apply failed:",
+        err
+      );
+    }
   } catch (err) {
     console.error(
-      "[HugoAura / Base] Custom screen saver startup apply failed:",
+      "[HugoAura / Base] Failed to wire custom screen saver IPC:",
       err
     );
   }

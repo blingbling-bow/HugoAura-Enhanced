@@ -78,10 +78,16 @@ const __AURA_VERSION__ = "v0.3.3";
             entry.dispatchEvent(configUpdateEvent);
           });
         }
+        // 敏感值脱敏: settingsPassword* (密码哈希/验证串) 是配置加密密钥的
+        // 派生源, 明文打进控制台会让配置加密对能开 DevTools 的人失去意义
+        const changedPath = [...path, prop].join(".");
+        const isSensitivePath = changedPath.includes(
+          "auraSettings.settingsPassword"
+        );
         console.log(
-          `[HugoAura / Config] Config changed at path: ${[...path, prop].join(
-            "."
-          )}, new value: ${value}`
+          `[HugoAura / Config] Config changed at path: ${changedPath}, new value: ${
+            isSensitivePath ? "[redacted]" : value
+          }`
         );
 
         // 落盘判定必须以 configManager.useEncConfig (磁盘当前是否加密) 为准。
