@@ -9,6 +9,35 @@ const DIGEST = "sha256";
 const SALT_LENGTH = 16;
 
 /**
+ * base64url 编码 (URL 安全, 去掉填充)。
+ *
+ * 不能直接用 Buffer 的 "base64url" 内置编码: 该编码是 Node 15.7 才加入的, 而宿主管家
+ * 内置的 Electron / Node 版本更老, 会在编码时抛 "Unknown encoding: base64url" ——
+ * 表现为"密码格式正确、也确实填了, 却始终设置不上, 开关也打不开"。
+ * 这里手工转换, 输出与 Node 内置 base64url 完全一致, 已存的哈希仍然兼容。
+ * @param {Buffer} buf
+ * @returns {string}
+ */
+const base64UrlEncode = (buf) =>
+  buf
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+
+/**
+ * base64url 解码: 先还原 +/ 字符并补齐填充, 再按标准 base64 解析。
+ * 老版本 Node 的 Buffer 同样不认识 "base64url", 必须手工还原。
+ * @param {string} str
+ * @returns {Buffer}
+ */
+const base64UrlDecode = (str) => {
+  const std = String(str).replace(/-/g, "+").replace(/_/g, "/");
+  const padLen = (4 - (std.length % 4)) % 4;
+  return Buffer.from(std + "=".repeat(padLen), "base64");
+};
+
+/**
  * Create a versioned, slow password verifier. The salt is stored with the
  * verifier; it is not a secret and is required for deterministic checking.
  * @param {string} password
@@ -23,8 +52,8 @@ const hashPassword = (password) => {
     KEY_LENGTH,
     DIGEST
   );
-  return `${PREFIX}${ITERATIONS}:${salt.toString("base64url")}:${derived.toString(
-    "base64url"
+  return `${PREFIX}${ITERATIONS}:${base64UrlEncode(salt)}:${base64UrlEncode(
+    derived
   )}`;
 };
 
@@ -49,8 +78,8 @@ const verifyPassword = (password, stored, legacySalt = "EndlessX") => {
       return { valid: false, needsUpgrade: false };
     }
     try {
-      const salt = Buffer.from(parts[3], "base64url");
-      const expected = Buffer.from(parts[4], "base64url");
+      const salt = base64UrlDecode(parts[3]);
+      const expected = base64UrlDecode(parts[4]);
       if (salt.length !== SALT_LENGTH || expected.length !== KEY_LENGTH) {
         return { valid: false, needsUpgrade: false };
       }

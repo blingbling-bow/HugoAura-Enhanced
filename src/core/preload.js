@@ -1,6 +1,6 @@
 // @ts-check
 
-const __AURA_VERSION__ = "v0.3.1";
+const __AURA_VERSION__ = "v0.3.3";
 
 (() => {
   if (require.main) return; // 如果只是导入 Aura Version, 不运行闭包逻辑
@@ -42,7 +42,9 @@ const __AURA_VERSION__ = "v0.3.1";
   if (!global.__HUGO_AURA_CONFIG_MGR__)
     global.__HUGO_AURA_CONFIG_MGR__ = configManager;
 
-  console.log(`[HugoAura / Preload] Preparing...`);
+  console.log(
+    `[HugoAura / Preload] Preparing... (v${__AURA_VERSION__}, code: ${__dirname})`
+  );
 
   /**
    *
@@ -66,7 +68,6 @@ const __AURA_VERSION__ = "v0.3.1";
             value,
           },
         });
-        const pathName = [...path, prop].join(".");
         document.dispatchEvent(configUpdateEvent);
 
         const settingsEntries = document.getElementsByClassName(
@@ -83,17 +84,11 @@ const __AURA_VERSION__ = "v0.3.1";
           )}, new value: ${value}`
         );
 
-        const isEditingEncSettings = pathName.includes(
-          "auraSettings.settingsPassword"
-        );
-
-        if (
-          isEditingEncSettings &&
-          global.__HUGO_AURA_CONFIG__.auraSettings.encryptConfig
-        ) {
-          return true;
-        }
-
+        // 落盘判定必须以 configManager.useEncConfig (磁盘当前是否加密) 为准。
+        // 之前用配置标志 auraSettings.encryptConfig 判定: 关闭 "启用访问密码"
+        // 会把 useEncConfig 置 false (磁盘切回明文) 却不会复位 encryptConfig,
+        // 于是此后 auraSettings.settingsPassword* 的赋值被静默丢弃, 重启后
+        // 密码哈希 / 启用标志消失 (表现为 "访问密码无法启用")。
         if (!configManager.useEncConfig) {
           configManager.writeConfig(window.__HUGO_AURA_CONFIG__); // 仅非加密 Config 使用即时写入, 否则会导致性能问题
         } else {

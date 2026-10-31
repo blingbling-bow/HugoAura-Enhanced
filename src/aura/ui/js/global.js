@@ -41,6 +41,30 @@
     createOnLeaveEvtListener,
   };
 
+  /* ===== 预载密码哈希工具 =====
+   * 渲染层脚本的相对 require 基准有两种 (以文档为基准 / 以脚本自身为基准),
+   * 写死哪一种都可能踩空; 一旦取不到模块, 设置密码的链路就会抛错。
+   * 这里用候选列表加载一次并挂到全局, 供 settings/aura.js 与 config.js 取用。 */
+  (() => {
+    if (global.__HUGO_AURA_PASSWORD_HASH__) return;
+    const candidates = [
+      "../../aura/utils/passwordHash", // 渲染层 (文档) 基准
+      "../../../utils/passwordHash", // 脚本自身基准
+    ];
+    for (const candidate of candidates) {
+      try {
+        const mod = require(candidate);
+        if (mod && typeof mod.hashPassword === "function") {
+          global.__HUGO_AURA_PASSWORD_HASH__ = mod;
+          return;
+        }
+      } catch (_err) {
+        // 该候选不可用, 继续尝试下一个
+      }
+    }
+    console.warn("[HugoAura] 未能预载 passwordHash 模块, 将回退到按需加载");
+  })();
+
   /* ===== 窥屏提醒弹窗 ===== */
   (() => {
     if (!global.ipcRenderer)
@@ -223,5 +247,46 @@
     ipcRenderer.on("$aura.lockScreen.onBlocked", (_event, arg) => {
       if (arg && arg.record) showAlert(arg.record);
     });
+  })();
+
+  /* ===== 渲染层插件加载 (ui 类型, 详见 pluginIpcHandler/pluginManager) ===== */
+  (async () => {
+    try {
+      if (!global.ipcRenderer)
+        global.ipcRenderer = require("electron").ipcRenderer;
+
+      const res = await global.ipcRenderer.invoke("$aura.plugin.list");
+      if (!res || !res.success) return;
+
+      let auraDir = (global.__HUGO_AURA__ && global.__HUGO_AURA__.auraDir) || "";
+      if (!auraDir) {
+        const syncRes = global.ipcRenderer.sendSync("$aura.base.getAuraDirSync");
+        auraDir = (syncRes && syncRes.data) || "";
+      }
+      if (!auraDir) return;
+
+      const nodePath = require("path");
+      for (const item of res.data || []) {
+        if (item.type !== "ui" || item.enabled !== true) continue;
+        try {
+          // 插件代码与 Aura 同权限运行 (无沙箱), 启用开关在插件管理页
+          const instance = require(
+            nodePath.join(auraDir, "plugins", item.id, item.main)
+          );
+          if (instance && typeof instance.onLoad === "function") {
+            instance.onLoad({
+              manifest: item,
+              auraVersion: global.__HUGO_AURA__ && global.__HUGO_AURA__.version,
+              ipcRenderer: global.ipcRenderer,
+            });
+          }
+          console.log(`[HugoAura / UIPlugin] Loaded: ${item.id} v${item.version}`);
+        } catch (err) {
+          console.error(`[HugoAura / UIPlugin] Failed to load ${item.id}:`, err);
+        }
+      }
+    } catch (err) {
+      console.error("[HugoAura / UIPlugin] Plugin bootstrap failed:", err);
+    }
   })();
 })();

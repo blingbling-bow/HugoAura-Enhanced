@@ -87,12 +87,26 @@ const renderInputArea = (entry, operationArea, descriptionArea) => {
       switchEl.checked = elValue;
       switchEl.addEventListener("change", async (event) => {
         showToast(entry);
-        await entry.callbackFn(
-          event.target.checked,
-          switchEl,
-          operationArea,
-          descriptionArea
-        );
+        try {
+          await entry.callbackFn(
+            event.target.checked,
+            switchEl,
+            operationArea,
+            descriptionArea
+          );
+        } catch (err) {
+          // 开关回调抛错同样不能"点了没反应": 回滚开关状态并把原因显示出来
+          console.error(`[HugoAura] 设置项 ${entry.id} 切换失败:`, err);
+          switchEl.checked = !event.target.checked;
+          if (descriptionArea) {
+            descriptionArea.textContent = `操作失败: ${(err && err.message) || err}`;
+            descriptionArea.classList.add("ase-desc-error-hint");
+            setTimeout(() => {
+              descriptionArea.textContent = entry.description;
+              descriptionArea.classList.remove("ase-desc-error-hint");
+            }, 5000);
+          }
+        }
       });
       operationArea.classList.add("form-check", "form-switch");
       return switchEl;
@@ -198,13 +212,25 @@ const renderInputArea = (entry, operationArea, descriptionArea) => {
       inputEl.id = entry.id;
 
       const handleSubmit = async (event = null) => {
-        const result = await entry.callbackFn(
-          event ? event.target.value : inputEl.value,
-          inputEl,
-          operationArea,
-          descriptionArea
-        );
-        const success = result.valid;
+        // callbackFn 抛错时不能静默吞掉: 旧实现既不给输入框标红, 也不显示任何
+        // hint, 用户只会看到"填了格式正确的密码却毫无反应"。这里统一兜底, 把
+        // 异常信息写到输入框下方的描述区, 便于定位 (Issue #12)。
+        let result;
+        try {
+          result = await entry.callbackFn(
+            event ? event.target.value : inputEl.value,
+            inputEl,
+            operationArea,
+            descriptionArea
+          );
+        } catch (err) {
+          console.error(`[HugoAura] 设置项 ${entry.id} 提交失败:`, err);
+          result = {
+            valid: false,
+            hint: `操作失败: ${(err && err.message) || err}`,
+          };
+        }
+        const success = !!(result && result.valid);
         if (success) {
           showToast(entry);
 
@@ -215,7 +241,8 @@ const renderInputArea = (entry, operationArea, descriptionArea) => {
           }
         } else {
           inputEl.classList.add("is-invalid");
-          descriptionArea.textContent = result.hint;
+          descriptionArea.textContent =
+            (result && result.hint) || "操作失败, 请重试";
           descriptionArea.classList.add("ase-desc-error-hint");
         }
       };
@@ -224,10 +251,16 @@ const renderInputArea = (entry, operationArea, descriptionArea) => {
         await handleSubmit(event);
       });
 
-      inputEl.onsubmit = async (evt) => {
-        evt.preventDefault();
-        await handleSubmit();
-      };
+      // Enter 在含文本输入框的 <form> 中会触发隐式表单提交: change 回调
+      // 刚把二次确认弹窗排上队, 页面就随表单导航重载了 (Issue #12 的
+      // "输入密码回车后崩溃 / 确认框打不开")。阻止默认提交并失焦,
+      // 借 change 事件提交当前值 (值未改动时 change 不会重复触发)。
+      inputEl.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          inputEl.blur();
+        }
+      });
 
       operationArea.classList.add("ase-operation-area-expanded");
       return inputEl;
@@ -488,6 +521,9 @@ const renderChild = (entry, formEl) => {
 const settingsRenderer = (pendingEl, settingsObj) => {
   const formEl = document.createElement("form");
   formEl.classList.add("aura-settings-form");
+  // 兜底: 设置页不存在合法的表单提交场景, 任何隐式/显式提交一律阻止,
+  // 防止页面被导航走 (明文密码会随 GET 拼进 URL 查询串)
+  formEl.addEventListener("submit", (event) => event.preventDefault());
   for (const category of settingsObj) {
     const categoryTitleEl = document.createElement("p");
     categoryTitleEl.classList.add("aura-settings-category-header");

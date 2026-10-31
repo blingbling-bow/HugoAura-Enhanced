@@ -5,6 +5,35 @@ global.__HUGO_AURA_UI_REACTIVES__.config = {
   isConfigPendingWrite: false,
 };
 
+/**
+ * 加载密码哈希工具 (passwordHash)。
+ *
+ * config.js 是以 <script src="../../aura/..."> 注入渲染层的脚本 (见 injection.js),
+ * 该上下文中 require 以"文档"为基准解析; 而单元测试在 Node 下以"脚本自身"为基准。
+ * 两种基准互不一致, 故按候选依次尝试, 全部失败才抛错。
+ */
+const loadPasswordHash = () => {
+  // 优先取 global.js 预载好的实例, 彻底绕开 require 基准差异
+  const preloaded = global.__HUGO_AURA_PASSWORD_HASH__;
+  if (preloaded && typeof preloaded.hashPassword === "function") return preloaded;
+
+  const candidates = [
+    "../../aura/utils/passwordHash", // 渲染层基准 (与 injection.js 的资源前缀一致)
+    "../../../utils/passwordHash", // Node / 脚本相对基准
+  ];
+  const tried = [];
+  for (const candidate of candidates) {
+    try {
+      const mod = require(candidate);
+      if (mod && typeof mod.hashPassword === "function") return mod;
+      tried.push(`${candidate} (模块中没有 hashPassword)`);
+    } catch (err) {
+      tried.push(`${candidate} (${(err && err.message) || err})`);
+    }
+  }
+  throw new Error(`[HugoAura] 无法加载 passwordHash 模块; 已尝试: ${tried.join("; ")}`);
+};
+
 global.__HUGO_AURA_UI_FUNCTIONS__.config = {
   getDefaultHeaderEl: () => {
     const headerSelectors = [
@@ -127,7 +156,6 @@ global.__HUGO_AURA_UI_FUNCTIONS__.config = {
         }
         break;
       case "plugins":
-        // To Be Done
         preserveOperationIdx = 2;
         pendingSubPageId = "Aura.UI.Assistant.Config.Plugins";
         break;
@@ -203,7 +231,7 @@ global.__HUGO_AURA_UI_FUNCTIONS__.config = {
       return false;
     }
 
-    const { verifyPassword, hashPassword } = require("../../../utils/passwordHash");
+    const { verifyPassword, hashPassword } = loadPasswordHash();
     const stored = global.__HUGO_AURA_CONFIG__.auraSettings.settingsPasswordWithSalt;
     const result = verifyPassword(userPasswdInput, stored);
 
@@ -484,8 +512,9 @@ global.__HUGO_AURA_UI_FUNCTIONS__.config = {
       showOperationsAnimation();
     } else if (
       global.__HUGO_AURA_CONFIG__.auraSettings.settingsPasswordWithSalt ===
-      global.__HUGO_AURA_CONFIG_MGR__.getDefaultConfig().auraSettings
-        .settingsPasswordWithSalt
+      // 可选链兜底: 默认配置读取失败时取值抛错会卡死整个解锁流程
+      global.__HUGO_AURA_CONFIG_MGR__?.getDefaultConfig()?.auraSettings
+        ?.settingsPasswordWithSalt
     ) {
       // Password protection was enabled but no custom password was ever set
       // (stored hash is still the default). Auto-reset to prevent permanent lockout.

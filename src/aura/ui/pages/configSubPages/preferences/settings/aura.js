@@ -1,5 +1,35 @@
 // @ts-check
 
+/**
+ * 加载密码哈希工具 (passwordHash)。
+ *
+ * 本子页脚本是以 <script src="../../aura/..."> 注入到渲染层的 (见 injection.js),
+ * 该上下文中 require 以"文档"为基准解析; 而单元测试在 Node 下以"脚本自身"为基准。
+ * 两种基准互不一致, 因此按候选列表依次尝试, 全部失败才抛错 —— 这样既能
+ * 在渲染层正常加载, 也不会让 Node 测试挂掉。
+ */
+const loadPasswordHash = () => {
+  // 优先取 global.js 预载好的实例, 彻底绕开 require 基准差异
+  const preloaded = global.__HUGO_AURA_PASSWORD_HASH__;
+  if (preloaded && typeof preloaded.hashPassword === "function") return preloaded;
+
+  const candidates = [
+    "../../aura/utils/passwordHash", // 渲染层基准 (与 injection.js 的资源前缀一致)
+    "../../../../../utils/passwordHash", // Node / 脚本相对基准
+  ];
+  const tried = [];
+  for (const candidate of candidates) {
+    try {
+      const mod = require(candidate);
+      if (mod && typeof mod.hashPassword === "function") return mod;
+      tried.push(`${candidate} (模块中没有 hashPassword)`);
+    } catch (err) {
+      tried.push(`${candidate} (${(err && err.message) || err})`);
+    }
+  }
+  throw new Error(`[HugoAura] 无法加载 passwordHash 模块; 已尝试: ${tried.join("; ")}`);
+};
+
 const functions = {
   /**
    *
@@ -75,12 +105,58 @@ const functions = {
     const acpDialogCancelBtnEl = document.getElementsByClassName(
       "acp-auth-cancel-btn"
     )[0];
-    // @ts-expect-error
-    acsDialogAreaEl.style = "";
-    acpDialogTitleEl.textContent = "请再次输入密码";
-    await window.__HUGO_AURA_GLOBAL__.utils.sleep(50);
-    acpAppBarEl.classList.add("color-reverse");
-    acsDialogAreaEl.classList.remove("acp-ada-hidden");
+
+    /**
+     * 保存新哈希 + 启用标志 + (必要时) 触发加密配置刷新。
+     *
+     * 二次确认弹窗只是"防手滑"的体验增强, 绝不能成为密码能否落盘的前提:
+     * 旧实现把落盘写在弹窗回调里, 一旦弹窗元素缺失 / 装配异常, 这里直接抛错,
+     * 而 settingsRenderer 的提交回调没有 try/catch, 异常被静默吞掉 ——
+     * 用户看到的现象就是"密码格式正确、也确实填了, 但开关死活打不开
+     * (配置里的哈希仍等于默认值)"。
+     */
+    const commitPassword = async () => {
+      global.__HUGO_AURA_CONFIG__.auraSettings.settingsPasswordWithSalt =
+        password;
+      // 启用标志必须在加密刷新之前写入: encryptConfig 开启时,
+      // settingsPassword* 的赋值不会即时落盘 (留给随后的加密流程补写);
+      // 若把该标志放在加密流程之后赋值, 就会成为一次没有后续写盘的动作,
+      // 重启后回弹为关闭 (表现为 "设置密码后开关仍打不开")。
+      global.__HUGO_AURA_CONFIG__.auraSettings.settingsPasswordEnabled = true;
+      if (global.__HUGO_AURA_CONFIG__.auraSettings.encryptConfig) {
+        functions.handleEnableConfigEncryption("update", password);
+      }
+    };
+
+    // 弹窗不可用时直接落盘: 宁可少一次"再输一遍"的防手滑, 也不能让密码设不上
+    const commitWithoutDialog = async (reason) => {
+      console.error(
+        "[HugoAura] 二次确认弹窗不可用, 直接保存访问密码。原因:",
+        reason
+      );
+      await commitPassword();
+      return { valid: true };
+    };
+
+    if (
+      !acsDialogAreaEl ||
+      !acpDialogTitleEl ||
+      !acpDialogConfirmBtnEl ||
+      !acpDialogCancelBtnEl
+    ) {
+      return await commitWithoutDialog("身份验证弹窗的 DOM 元素缺失");
+    }
+
+    try {
+      // @ts-expect-error
+      acsDialogAreaEl.style = "";
+      acpDialogTitleEl.textContent = "请再次输入密码";
+      await window.__HUGO_AURA_GLOBAL__.utils.sleep(50);
+      if (acpAppBarEl) acpAppBarEl.classList.add("color-reverse");
+      acsDialogAreaEl.classList.remove("acp-ada-hidden");
+    } catch (err) {
+      return await commitWithoutDialog(err);
+    }
 
     const showFailedAnimation = async (el) => {
       el.classList.remove("invalid");
@@ -119,19 +195,17 @@ const functions = {
         return;
       }
 
-      const { verifyPassword, hashPassword } = require("../../../../../utils/passwordHash");
+      const { verifyPassword } = loadPasswordHash();
       const result = verifyPassword(userPasswdInput, password);
 
       if (result.valid) {
         await global.__HUGO_AURA_UI_FUNCTIONS__.config.hideAndResetAuthDialog();
 
-        if (result.needsUpgrade) {
-          global.__HUGO_AURA_CONFIG__.auraSettings.settingsPasswordWithSalt =
-            hashPassword(userPasswdInput);
-        }
-        if (global.__HUGO_AURA_CONFIG__.auraSettings.encryptConfig) {
-          functions.handleEnableConfigEncryption("update", password);
-        }
+        // 无条件保存校验通过的新哈希: PBKDF2 重构时误将落盘收进
+        // needsUpgrade 分支, 导致新密码设置成功后哈希永远不写入配置,
+        // 密码保护无法启用 (Issue #12)。password 即本次输入的新哈希,
+        // 无需对二次输入重新做一次 PBKDF2。
+        await commitPassword();
         if (resolveFn) resolveFn(true);
         return;
       } else {
@@ -201,9 +275,10 @@ const auraSettings = [
         callbackFn: async (newVal, el, _opArea, descriptionArea) => {
           if (typeof newVal !== "boolean") return;
           if (newVal) {
+            // 可选链兜底: 默认配置读取失败时 (getDefaultConfig 返回
+            // {rewrite:{}}) 直接取值会抛 TypeError, 开关将无任何反馈地失效
             const defaultHash = global.__HUGO_AURA_CONFIG_MGR__
-              .getDefaultConfig()
-              .auraSettings.settingsPasswordWithSalt;
+              ?.getDefaultConfig()?.auraSettings?.settingsPasswordWithSalt;
             if (
               global.__HUGO_AURA_CONFIG__.auraSettings
                 .settingsPasswordWithSalt === defaultHash
@@ -312,18 +387,21 @@ const auraSettings = [
             };
           }
 
-          const { hashPassword } = require("../../../../../utils/passwordHash");
+          const { hashPassword } = loadPasswordHash();
           const result = hashPassword(newVal);
 
           const promptResult = await functions.handle2ndPasswordPrompt(result);
 
-          // Auto-enable password protection after a password is successfully confirmed
-          if (
-            promptResult.valid &&
-            !global.__HUGO_AURA_CONFIG__.auraSettings.settingsPasswordEnabled
-          ) {
-            global.__HUGO_AURA_CONFIG__.auraSettings.settingsPasswordEnabled =
-              true;
+          // 密码确认成功后自动启用: settingsPasswordEnabled 已在
+          // handle2ndPasswordPrompt 里提前置 true, 这里把开关 UI 同步到
+          // 已启用状态, 并对配置值做一次兜底。
+          if (promptResult.valid) {
+            if (
+              !global.__HUGO_AURA_CONFIG__.auraSettings.settingsPasswordEnabled
+            ) {
+              global.__HUGO_AURA_CONFIG__.auraSettings.settingsPasswordEnabled =
+                true;
+            }
             const toggleEl = document.getElementById(
               "enableAuraSettingsPasswd"
             );
