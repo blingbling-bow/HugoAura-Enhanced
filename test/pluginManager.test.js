@@ -29,7 +29,7 @@ const makeEnv = (t, { enabledMap = {} } = {}) => {
     tmpDir,
     config,
     /** 在 plugins/<id>/ 下落一个插件目录 */
-    makePlugin: (id, { type = "main", onLoadBody = "" } = {}) => {
+    makePlugin: (id, { type = "main" } = {}) => {
       const pluginDir = path.join(tmpDir, "plugins", id);
       fs.mkdirSync(pluginDir, { recursive: true });
       fs.writeFileSync(
@@ -42,18 +42,31 @@ const makeEnv = (t, { enabledMap = {} } = {}) => {
           description: "test plugin",
           type,
           main: "main.js",
+          permissions: [
+            { key: "storage", label: "存储" },
+            { key: "events", label: "事件" },
+          ],
         })
       );
       fs.writeFileSync(
         path.join(pluginDir, "main.js"),
         [
-          "const s = (global.__pluginTestState = global.__pluginTestState || {});",
-          `s["${id}"] = { loaded: true };`,
+          "// 沙箱契约插件: 通过 settings 持久化向宿主测试断言暴露状态",
+          "var savedCtx = null;",
           "module.exports = {",
-          `  onLoad(ctx) { s["${id}"].ctx = { storageDir: ctx.storageDir, centralOk: typeof ctx.central === "function", version: ctx.auraVersion, eventName: ctx.eventBus ? "ok" : null }; },`,
-          "  onUnload() { s[\"" + id + "\"].unloaded = true; }",
+          "  onLoad: function (ctx) {",
+          "    savedCtx = ctx;",
+          "    ctx.settings.set({",
+          "      loaded: true,",
+          "      version: ctx.auraVersion,",
+          "      manifestId: ctx.manifest.id,",
+          "      eventBusType: typeof ctx.eventBus,",
+          "    });",
+          "  },",
+          "  onUnload: function () {",
+          "    if (savedCtx) savedCtx.settings.set({ unloaded: true });",
+          "  },",
           "};",
-          onLoadBody,
         ].join("\n")
       );
       return pluginDir;
@@ -120,7 +133,7 @@ test("validateManifest: 结构校验", () => {
   );
 });
 
-test("loadPlugins: 已启用的 main 插件被加载并拿到 ctx", (t) => {
+test("loadPlugins: 已启用的 main 插件经沙箱加载并可观测", (t) => {
   const env = makeEnv(t, { enabledMap: { "demo.a": true } });
   try {
     env.makePlugin("demo.a");
@@ -130,11 +143,19 @@ test("loadPlugins: 已启用的 main 插件被加载并拿到 ctx", (t) => {
     assert.strictEqual(res.loaded, 1);
     assert.strictEqual(pluginManager.isMainPluginLoaded("demo.a"), true);
 
-    const state = global.__pluginTestState["demo.a"];
+    // 沙箱契约: 状态经 settings 持久化暴露 (沙箱内不可见宿主 global)
+    const settingsPath = path.join(
+      env.tmpDir, "plugins", "demo.a", "storage", "settings.json"
+    );
+    const state = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
     assert.strictEqual(state.loaded, true);
-    assert.strictEqual(state.ctx.centralOk, true, "ctx.central 应可用");
-    assert.strictEqual(state.ctx.version, "v9.9.9");
-    assert.ok(fs.existsSync(state.ctx.storageDir), "storageDir 应已创建");
+    assert.strictEqual(state.version, "v9.9.9");
+    assert.strictEqual(state.manifestId, "demo.a");
+    assert.strictEqual(state.eventBusType, "object", "events 权限应暴露 eventBus");
+    assert.ok(
+      fs.existsSync(path.join(env.tmpDir, "plugins", "demo.a", "storage")),
+      "storage 目录应已创建"
+    );
   } finally {
     env.cleanup();
   }
@@ -157,19 +178,25 @@ test("loadPlugins: 未启用 / ui 类型 / 非法目录均被跳过", (t) => {
   }
 });
 
-test("disablePlugin / enablePlugin: onUnload 被调, require 缓存被清", (t) => {
+test("disablePlugin / enablePlugin: onUnload 被调 + 沙箱资源回收后可重新加载", (t) => {
   const env = makeEnv(t, { enabledMap: { "demo.a": true } });
   try {
     env.makePlugin("demo.a");
     pluginManager.loadPlugins();
     assert.strictEqual(pluginManager.isMainPluginLoaded("demo.a"), true);
+    const settingsPath = path.join(
+      env.tmpDir, "plugins", "demo.a", "storage", "settings.json"
+    );
 
     pluginManager.disablePlugin("demo.a");
-    assert.strictEqual(global.__pluginTestState["demo.a"].unloaded, true);
+    const afterUnload = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    assert.strictEqual(afterUnload.unloaded, true, "onUnload 应被调");
     assert.strictEqual(pluginManager.isMainPluginLoaded("demo.a"), false);
 
-    // 再启用: 重新加载 (require 缓存已清, onLoad 再次执行)
+    // 再启用: 沙箱资源已回收, onLoad 再次执行
     pluginManager.enablePlugin("demo.a");
+    const afterReload = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    assert.strictEqual(afterReload.loaded, true);
     assert.strictEqual(pluginManager.isMainPluginLoaded("demo.a"), true);
   } finally {
     env.cleanup();

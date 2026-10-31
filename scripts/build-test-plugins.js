@@ -88,7 +88,7 @@ const buildZip = (entries) => {
 const MAIN_MANIFEST = {
   id: "com.aura.test.main",
   name: "Aura 测试插件 (主进程)",
-  version: "1.1.0",
+  version: "1.2.0",
   author: "HugoAura",
   description:
     "验证主进程插件运行时: 配置读取 / 存储目录写入 / 事件总线订阅 / 设置项读写 / 心跳存活 / 卸载清理。启用后每 60 秒输出一条心跳日志。",
@@ -117,55 +117,59 @@ const MAIN_MANIFEST = {
   ],
   permissions: [
     {
+      key: "storage",
+      label: "私有存储",
+      description: "插件可读写自己的持久化设置 (storage/settings.json)",
+    },
+    {
       key: "network",
       label: "联网",
-      description: "插件可发起网络请求",
+      description: "插件可发起经安全校验的网络请求",
+    },
+    {
+      key: "events",
+      label: "事件总线",
+      description: "插件可订阅/发布自己命名空间的事件",
     },
   ],
-  capabilities: { events: ["configRefresh", "settingsChanged"] },
+  capabilities: { events: ["settingsChanged"] },
 };
 
-const MAIN_CODE = `// 测试插件: 验证主进程运行时的各项能力
-let heartbeatTimer = null;
-let tickCount = 0;
+const MAIN_CODE = `// 测试插件: 验证主进程沙箱运行时的各项能力 (无 require/fs/central)
+var savedCtx = null;
+var heartbeatTimer = null;
+var tickCount = 0;
 
 module.exports = {
   onLoad(ctx) {
-    ctx.logger.log("onLoad: 测试主进程插件已加载, Aura 版本", ctx.auraVersion);
+    savedCtx = ctx;
+    ctx.logger.log("onLoad: 测试主进程插件已加载 (vm 沙箱), Aura 版本", ctx.auraVersion);
 
-    // 1) 配置热读
-    const config = ctx.config.get();
+    // 1) 配置只读快照 (settingsPassword* 已脱敏)
+    var config = ctx.config.get();
     ctx.logger.log("config 可读:", Boolean(config && config.auraSettings));
 
-    // 2) storageDir 私有可写目录 + 持久化设置
-    const fs = require("fs");
-    const path = require("path");
-    const bootFile = path.join(ctx.storageDir, "boot.json");
-    fs.writeFileSync(
-      bootFile,
-      JSON.stringify({ loadedAt: new Date().toISOString(), auraVersion: ctx.auraVersion }, null, 2)
-    );
-    ctx.logger.log("storageDir 写入成功:", bootFile);
+    // 2) 插件私有设置: 宿主持久化到 storage/settings.json (无文件系统访问)
     ctx.logger.log("已保存的插件设置:", JSON.stringify(ctx.settings.get()));
+    ctx.settings.set({
+      lastLoadedAt: new Date().toISOString(),
+      auraVersion: ctx.auraVersion,
+    });
+    ctx.logger.log("设置已写回 (storage 权限)");
 
-    // 3) 事件总线订阅 (配置刷新 / 设置保存都会打点)
-    if (ctx.eventBus && ctx.eventBus.on) {
-      ctx.eventBus.on("$aura.config.refreshConfig", () => {
-        ctx.logger.log("eventBus: 收到配置刷新事件");
-      });
-      ctx.eventBus.on("$aura.plugin." + ctx.manifest.id + ".settingsChanged", (values) => {
-        ctx.logger.log("eventBus: 设置已更新", JSON.stringify(values));
-      });
-      ctx.logger.log("eventBus 订阅成功");
-    }
+    // 3) 事件总线: 仅可订阅/发布自己命名空间 ($aura.plugin.<id>.*)
+    ctx.eventBus.on(
+      "$aura.plugin." + ctx.manifest.id + ".settingsChanged",
+      function (valuesJson) {
+        ctx.logger.log("eventBus: 设置已更新", valuesJson);
+      }
+    );
+    ctx.logger.log("eventBus 订阅成功 (命名空间: $aura.plugin." + ctx.manifest.id + ".* )");
 
-    // 4) central 可用性探测 (不实际调用管家模块)
-    ctx.logger.log("central 类型:", typeof ctx.central);
-
-    // 5) 心跳: 证明插件持续存活; onUnload 时清理
-    const settings = ctx.settings.get();
-    const intervalMs = (Number(settings.heartbeatSeconds) > 0 ? Number(settings.heartbeatSeconds) : 60) * 1000;
-    heartbeatTimer = setInterval(() => {
+    // 4) 心跳: 沙箱定时器 (上限 16 个, 卸载时宿主强制回收)
+    var settings = ctx.settings.get();
+    var intervalMs = (Number(settings.heartbeatSeconds) > 0 ? Number(settings.heartbeatSeconds) : 60) * 1000;
+    heartbeatTimer = ctx.timers.setInterval(function () {
       tickCount += 1;
       ctx.logger.log("heartbeat #" + tickCount);
     }, intervalMs);
@@ -173,26 +177,22 @@ module.exports = {
   },
 
   onUnload() {
-    if (heartbeatTimer) {
-      clearInterval(heartbeatTimer);
+    if (heartbeatTimer && savedCtx) {
+      savedCtx.timers.clearInterval(heartbeatTimer);
       heartbeatTimer = null;
     }
-    console.log("[HugoAura / Plugin:com.aura.test.main] onUnload: 心跳定时器已清理");
   },
 };`;
 
-// onUnload 里用不到 ctx -> 把前缀直接写死, 修正上面的引用问题
-const MAIN_CODE_FIXED = MAIN_CODE.replace(
-  'ctx.logger.log("onUnload: 心跳定时器已清理");',
-  'console.log("[HugoAura / Plugin:com.aura.test.main] onUnload: 心跳定时器已清理");'
-);
+// 沙箱契约下 onUnload 通过闭包里的 savedCtx 清理定时器, 无需修正前缀
+const MAIN_CODE_FIXED = MAIN_CODE;
 
 // >>> 测试插件 2: 渲染层 <<<
 
 const UI_MANIFEST = {
   id: "com.aura.test.ui",
   name: "Aura 测试插件 (界面)",
-  version: "1.0.0",
+  version: "1.1.0",
   author: "HugoAura",
   description:
     "验证渲染层插件运行时: 在注入页面左下角显示加载徽章, 点击徽章测试 IPC 调用 (列出已装插件数量)。停用后下次页面注入时消失。",
@@ -200,35 +200,28 @@ const UI_MANIFEST = {
   main: "main.js",
 };
 
-const UI_CODE = `// 测试插件: 验证渲染层运行时 (DOM 注入 + IPC)
+const UI_CODE = `// 测试插件: 验证 UI 沙箱运行时 (声明式 DOM 桥 + IPC 白名单)
 module.exports = {
   onLoad(ctx) {
-    const mount = () => {
-      if (document.getElementById("auraTestUiPluginBadge")) return;
-      const badge = document.createElement("div");
-      badge.id = "auraTestUiPluginBadge";
-      badge.style.cssText =
+    var badgeId = ctx.dom.createEl("div", {
+      style:
         "position:fixed;left:12px;bottom:12px;z-index:2147483646;" +
         "background:rgba(33,143,255,0.92);color:#fff;padding:6px 12px;" +
         "border-radius:999px;font:12px 'Microsoft YaHei',sans-serif;" +
-        "box-shadow:0 4px 14px rgba(0,0,0,0.25);cursor:pointer;user-select:none;";
-      badge.textContent = "Aura UI \\u63d2\\u4ef6\\u5df2\\u52a0\\u8f7d \\u2713 v" + ctx.manifest.version;
-      badge.title = "com.aura.test.ui \\u2014 \\u70b9\\u51fb\\u6d4b\\u8bd5 IPC";
-      badge.onclick = async () => {
-        try {
-          const res = await ctx.ipcRenderer.invoke("$aura.plugin.list");
-          badge.textContent =
-            "插件列表: " + (res && res.success ? (res.data || []).length : "?") + " 个";
-        } catch (err) {
-          badge.textContent = "IPC 调用失败";
-        }
-      };
-      (document.body || document.documentElement).appendChild(badge);
-      console.log("[HugoAura / UIPlugin:com.aura.test.ui] 徽章已挂载");
-    };
+        "box-shadow:0 4px 14px rgba(0,0,0,0.25);cursor:pointer;user-select:none;",
+      title: "com.aura.test.ui — 点击测试 IPC",
+    });
+    ctx.dom.setText(badgeId, "Aura UI 插件已加载 (沙箱) ✓ v" + ctx.manifest.version);
+    ctx.dom.appendToBody(badgeId);
 
-    if (document.body) mount();
-    else document.addEventListener("DOMContentLoaded", mount);
+    ctx.dom.on(badgeId, "click", function () {
+      ctx.ipc.invoke("$aura.plugin.list").then(function (res) {
+        var count = res && res.success ? (res.data || []).length : "?";
+        ctx.dom.setText(badgeId, "插件列表: " + count + " 个");
+      });
+    });
+
+    ctx.logger.log("徽章已挂载 (DOM 桥)");
   },
 };
 `;

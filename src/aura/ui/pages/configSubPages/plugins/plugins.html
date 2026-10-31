@@ -30,7 +30,12 @@
     <section class="aura-market-warning">
       <p class="aura-market-warning-title"><span class="aura-market-warning-icon"><svg class="aura-market-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>安装前往意安全风险</p>
       <p class="aura-market-warning-body">
-        插件为第三方代码，软件已尽可能做了沙箱隔离，但仍无法完全杜绝风险。恶意插件可能访问你的数据或执行危险操作，请仅安装可信来源的插件。
+        主进程插件在 vm 能力沙箱中运行：沙箱内没有 require / fs / process /
+        管家内部模块，仅暴露 manifest、只读配置快照、日志、定时器，以及
+        manifest 声明的 storage / events / network 能力（联网经安全校验）。
+        UI 插件仅获得声明式 DOM 桥与 $aura.plugin.* 白名单 IPC，真实节点不进沙箱。
+        卸载时强制回收定时器与 DOM。沙箱是强化而非硬边界：恶意插件仍可能尝试
+        逃逸，请仅安装可信来源的插件。
       </p>
     </section>
 

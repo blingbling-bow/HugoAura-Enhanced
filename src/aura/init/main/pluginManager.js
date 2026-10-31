@@ -23,6 +23,10 @@
 
 const fs = require("fs");
 const path = require("path");
+const {
+  runMainPlugin,
+  resolveGrantedPermissions,
+} = require("./pluginSandbox");
 
 const ID_PATTERN = /^[A-Za-z][A-Za-z0-9._-]{2,63}$/;
 const PLUGIN_TYPES = ["main", "ui"];
@@ -198,57 +202,89 @@ const writePluginSettings = (pluginDir, values) => {
 };
 
 /**
- * 构造插件上下文 (见文件头注释)。
+ * 构造插件沙箱的宿主侧能力 (权限门控由 pluginSandbox 二次校验)。
  * @param {any} manifest
  * @param {string} pluginDir
  */
-const buildCtx = (manifest, pluginDir) => {
+const buildSandboxDeps = (manifest, pluginDir) => {
   const storageDir = path.join(pluginDir, "storage");
   fs.mkdirSync(storageDir, { recursive: true });
-  const prefix = `[HugoAura / Plugin:${manifest.id}]`;
   return {
-    manifest,
-    auraVersion: global.__HUGO_AURA__ && global.__HUGO_AURA__.version,
-    logger: {
-      log: (...args) => console.log(prefix, ...args),
-      warn: (...args) => console.warn(prefix, ...args),
-      error: (...args) => console.error(prefix, ...args),
-      debug: (...args) => console.debug(prefix, ...args),
-    },
-    config: {
-      get: () =>
-        global.__HUGO_AURA_CONFIG_MGR__ ? global.__HUGO_AURA_CONFIG_MGR__.loadConfig() : null,
-    },
-    eventBus: global.__HUGO_AURA_EVENT_BUS__ || null,
-    storageDir,
-    settings: {
+    settingsApi: {
       get: () => readPluginSettings(pluginDir),
       set: (values) => writePluginSettings(pluginDir, values),
     },
-    central: (global.__HUGO_AURA__ && global.__HUGO_AURA__.central) || null,
+    busApi: {
+      on: (event, fn) => {
+        try {
+          global.__HUGO_AURA_EVENT_BUS__.on(event, fn);
+        } catch (err) {
+          console.error(`[HugoAura / Plugin:${manifest.id}] bus.on 失败:`, err);
+        }
+      },
+      off: (event, fn) => {
+        try {
+          global.__HUGO_AURA_EVENT_BUS__.off(event, fn);
+        } catch (err) {
+          console.error(`[HugoAura / Plugin:${manifest.id}] bus.off 失败:`, err);
+        }
+      },
+      emit: (event, payload) => {
+        try {
+          global.__HUGO_AURA_EVENT_BUS__.emit(event, payload);
+        } catch (err) {
+          console.error(`[HugoAura / Plugin:${manifest.id}] bus.emit 失败:`, err);
+        }
+      },
+    },
+    storageDir,
   };
 };
 
 /**
  * 加载一个 main 插件 (调用方负责 try/catch)。
+ * main 插件在 vm 能力沙箱中运行: 无 require/fs/central, 仅暴露
+ * manifest/config/logger/timers + 声明的 storage/events/network 能力。
  * @param {string} pluginDir
  * @param {any} manifest
  */
 const loadMainPlugin = (pluginDir, manifest) => {
   const mainPath = path.join(pluginDir, manifest.main);
-  const instance = require(mainPath);
-  const ctx = buildCtx(manifest, pluginDir);
+  const source = fs.readFileSync(mainPath, "utf8");
+  const deps = buildSandboxDeps(manifest, pluginDir);
+  const granted = resolveGrantedPermissions(manifest);
+  const sandboxRun = runMainPlugin({
+    source,
+    manifest,
+    auraVersion: (global.__HUGO_AURA__ && global.__HUGO_AURA__.version) || "",
+    permissionsGranted: granted,
+    settingsApi: deps.settingsApi,
+    busApi: deps.busApi,
+    log: (level, line) => {
+      const prefix = "[HugoAura / Plugin:" + manifest.id + "]";
+      (level === "error" ? console.error : level === "warn" ? console.warn : console.log)(
+        prefix,
+        line
+      );
+    },
+  });
+  const instance = sandboxRun.instance;
   if (instance && typeof instance.onLoad === "function") {
-    instance.onLoad(ctx);
+    instance.onLoad(sandboxRun.ctx);
   }
-  loadedMainPlugins.set(manifest.id, { manifest, pluginDir, instance });
+  loadedMainPlugins.set(manifest.id, {
+    manifest,
+    pluginDir,
+    instance,
+    dispose: sandboxRun.dispose,
+  });
   console.log(
-    `[HugoAura / Plugins] Loaded main plugin: ${manifest.id} v${manifest.version}`
+    `[HugoAura / Plugins] Loaded main plugin: ${manifest.id} v${manifest.version} (sandbox: ${granted.join(", ") || "无权限"})`
   );
 };
 
 /**
- * 停用 main 插件: 尽力调 onUnload, 清 require 缓存 (下次启用重新加载)。
+ * 停用 main 插件: 尽力调 onUnload, 回收沙箱资源 (定时器等)。
  * @param {string} id
  */
 const unloadMainPlugin = (id) => {
@@ -262,9 +298,9 @@ const unloadMainPlugin = (id) => {
     console.error(`[HugoAura / Plugins] Plugin ${id} onUnload threw:`, err);
   }
   try {
-    delete require.cache[path.join(record.pluginDir, record.manifest.main)];
+    if (typeof record.dispose === "function") record.dispose();
   } catch (err) {
-    console.error(`[HugoAura / Plugins] Failed to clear require cache for ${id}:`, err);
+    console.error(`[HugoAura / Plugins] Plugin ${id} dispose threw:`, err);
   }
   loadedMainPlugins.delete(id);
   console.log(`[HugoAura / Plugins] Unloaded main plugin: ${id}`);
