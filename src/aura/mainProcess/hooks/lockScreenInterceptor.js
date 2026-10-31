@@ -110,6 +110,12 @@ const isWithinBootGrace = ({ elapsedMs, graceMs }) =>
   graceMs >= 0 &&
   elapsedMs <= graceMs;
 
+// 模块级: 最近一次开机锁屏拦截时间 (getElapsedMs 时钟, 本地/云端路径共用)。
+// 集控端在锁屏被拦后可能因状态不同步而重推锁屏指令, 固定的 graceSeconds
+// 窗口挡不住重推 —— 每次拦截都把保护窗口向后延长。
+let lastBootInterceptMs = 0;
+const BOOT_GUARD_EXTEND_MS = 5 * 60 * 1000;
+
 const hookFn = (central, deps = {}) => {
   // 开机保护窗口从"钩子安装"(即管家程序启动) 起算 —— 用户的场景是
   // "程序一打开就会锁屏", 因此不需要把开机自检的时间也算进去。
@@ -230,14 +236,27 @@ const hookFn = (central, deps = {}) => {
     return { graceSeconds };
   };
 
-  // 开机保护窗口是否仍有效 (云端/本地两条路径共用的判定)
+  // 开机保护窗口是否仍有效 (云端/本地两条路径共用的判定):
+  //   - 固定窗口: 管家启动后 graceSeconds 秒内;
+  //   - 动态延长: 只要最近一次开机锁屏拦截距今不足 BOOT_GUARD_EXTEND_MS,
+  //     窗口继续有效 —— 集控端重推的锁屏指令同样按开机锁屏静默拦截,
+  //     不会落进 notify 模式的"提醒 + 5 秒放行"流程。
   const isBootGuardActive = () => {
     const bootCfg = getBootGuardConfig();
     if (!bootCfg) return false;
-    return isWithinBootGrace({
-      elapsedMs: getElapsedMs(),
-      graceMs: bootCfg.graceSeconds * 1000,
-    });
+    const elapsed = getElapsedMs();
+    if (
+      isWithinBootGrace({
+        elapsedMs: elapsed,
+        graceMs: bootCfg.graceSeconds * 1000,
+      })
+    ) {
+      return true;
+    }
+    return (
+      lastBootInterceptMs > 0 &&
+      elapsed - lastBootInterceptMs < BOOT_GUARD_EXTEND_MS
+    );
   };
 
   // 仅拦截锁屏指令 (screenLockStatus === 1); 解锁指令 (0) 放行
@@ -422,6 +441,9 @@ const hookFn = (central, deps = {}) => {
       return false;
     }
 
+    // 记录拦截时间: 集控端随后重推的锁屏指令据此延长保护窗口
+    lastBootInterceptMs = getElapsedMs();
+
     // 静默拦截: 开机保护不弹提醒 (隐蔽优先), 仅审计留痕, 指令审计页可查
     console.log(
       `[HugoAura / BootLock] Blocked boot-time auto lock-screen from ${source} (within boot grace window).`
@@ -451,10 +473,12 @@ const hookFn = (central, deps = {}) => {
       data: null,
       _logType: "lockScreen",
     };
+    // 静默拦截: 开机保护不弹提醒 (隐蔽优先), 仅审计留痕, 指令审计页可查。
+    // 同时延长保护窗口 (集控端可能随后重推锁屏指令)。
+    lastBootInterceptMs = getElapsedMs();
     writeAudit(record);
     pushAuditEvent(record);
 
-    // 静默拦截: 开机保护不弹提醒 (隐蔽优先), 仅审计留痕, 指令审计页可查
     console.log(
       "[HugoAura / BootLock] Blocked boot-time local lock-screen (userLock) within boot grace window."
     );
@@ -471,6 +495,12 @@ const hookFn = (central, deps = {}) => {
     const isLock = isRemoteLock(parsed);
     const isUnlock = !isLock && isUnlockCommand(parsed);
     if (!isLock && !isUnlock) return false;
+
+    // 解锁指令是开机锁屏事件的终点: 立即结束保护延长窗口, 保证解锁之后
+    // 教师的正常远程锁屏马上恢复 (不会被残留的延长窗口静默吞掉)
+    if (isUnlock) {
+      lastBootInterceptMs = 0;
+    }
 
     const source = getWsSource();
 
@@ -643,8 +673,16 @@ const hookFn = (central, deps = {}) => {
   withRetry(tryInstall, { label: "LockScreen" })();
 };
 
+/**
+ * 重置开机保护拦截状态 (单测用): 拦截时间是模块级的, 跨测试用例共享。
+ */
+const resetBootGuardState = () => {
+  lastBootInterceptMs = 0;
+};
+
 module.exports = {
   hookFunc: hookFn,
   // 纯函数: 开机保护窗口判定 (单测用)
   isWithinBootGrace,
+  resetBootGuardState,
 };

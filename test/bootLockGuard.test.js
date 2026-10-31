@@ -76,6 +76,8 @@ const makeEnv = ({ bootEnabled = true, elapsedSec = 1 } = {}) => {
   };
   global.__HUGO_AURA_CONFIG_MGR__ = { loadConfig: () => config };
 
+  // 拦截时间是模块级的, 跨用例共享, 每个用例前重置
+  lockScreen.resetBootGuardState();
   lockScreen.hookFunc(central, { getElapsedMs: () => state.elapsedMs });
 
   return {
@@ -180,6 +182,83 @@ test("回执通道失败: fail-closed 放行真实锁屏 (与集控端保持一�
   }
 });
 
+test("拦截后窗口动态延长: 固定窗口过期后, 重推的锁屏指令仍被静默拦截", () => {
+  const env = makeEnv({ elapsedSec: 1 });
+  try {
+    // 窗口期内拦截一次本地开机锁屏
+    env.handler.userLock();
+    assert.strictEqual(env.userLockCalls.length, 0);
+
+    // 40 秒后 (已超 30 秒固定窗口): 集控端重推的云端锁屏指令仍按开机锁屏静默拦截,
+    // 不落进 notify 模式的 "提醒 + 5 秒放行" 流程
+    env.setElapsedSec(40);
+    env.handler.onMessage(LOCK_MSG("500"));
+    assert.strictEqual(env.lockFeedbackCalls.length, 1, "重推指令应被拦截并伪造回执");
+    assert.strictEqual(env.originalCalls.length, 0, "不应放行真实锁屏");
+    assert.strictEqual(
+      env.pushedRecords.filter((p) => p.channel === "$aura.lockScreen.onBlocked")
+        .length,
+      0,
+      "开机锁屏重推不应弹提醒"
+    );
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("动态延长有上限: 距最近一次拦截超过 5 分钟后恢复正常拦截流程", () => {
+  const env = makeEnv({ elapsedSec: 1 });
+  try {
+    env.handler.userLock(); // 1 秒时拦截一次
+
+    // 6 分钟后: 延长窗口已过 (拦截功能关闭), 锁屏指令交回管家原逻辑
+    env.setElapsedSec(1 + 360);
+    env.handler.onMessage(LOCK_MSG("600"));
+    assert.strictEqual(env.lockFeedbackCalls.length, 0);
+    assert.strictEqual(env.originalCalls.length, 1, "延长过期后应放行");
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("解锁即终点: 解锁指令之后, 云端锁屏立即恢复正常流程", () => {
+  const env = makeEnv({ elapsedSec: 1 });
+  try {
+    // 1s: 本地开机锁屏拦截 (静默)
+    env.handler.userLock();
+    assert.strictEqual(env.userLockCalls.length, 0);
+
+    // 40s: 集控端重推的锁屏指令仍被延长窗口静默拦截 + 伪造回执
+    env.setElapsedSec(40);
+    env.handler.onMessage(LOCK_MSG("700"));
+    assert.strictEqual(env.lockFeedbackCalls.length, 1);
+    assert.strictEqual(env.originalCalls.length, 0);
+
+    // 50s: 教师解锁 (拦截功能关闭 -> 交回管家原逻辑执行解锁)
+    env.setElapsedSec(50);
+    env.handler.onMessage(
+      JSON.stringify({
+        messageType: 1211,
+        data: { screenLockStatus: 0, operationLogId: "701" },
+      })
+    );
+    assert.strictEqual(env.originalCalls.length, 1, "解锁应交回管家");
+
+    // 100s: 教师再次远程锁屏 (已超 90s 固定窗口, 且延长窗口已随解锁结束)
+    // -> 正常放行真实锁屏
+    env.setElapsedSec(100);
+    env.handler.onMessage(LOCK_MSG("702"));
+    assert.strictEqual(env.originalCalls.length, 2, "解锁后云端锁屏应恢复正常");
+    assert.strictEqual(
+      env.lockFeedbackCalls.length,
+      1,
+      "真实锁屏由管家自行回执, 不再伪造"
+    );
+  } finally {
+    env.cleanup();
+  }
+});
+
 test("窗口期内: 本地 userLock (下课锁屏流程) 被吞掉并记审计", () => {
   const env = makeEnv({ elapsedSec: 1 });
   try {
@@ -267,15 +346,22 @@ test("未配置 graceSeconds 时默认窗口为 30 秒", () => {
   };
 
   try {
+    lockScreen.resetBootGuardState();
     lockScreen.hookFunc(central, { getElapsedMs: () => state.elapsedMs });
 
     state.elapsedMs = 29 * SECOND_MS;
     handler.userLock();
     assert.strictEqual(userLockCalls.length, 0, "29 秒仍在默认窗口内");
 
+    // 29 秒处发生过拦截 -> 保护窗口向后延长 5 分钟, 31 秒仍在保护期内
     state.elapsedMs = 31 * SECOND_MS;
     handler.userLock();
-    assert.strictEqual(userLockCalls.length, 1, "31 秒已超出默认窗口");
+    assert.strictEqual(userLockCalls.length, 0, "31 秒仍在延长窗口内");
+
+    // 距最近一次拦截超过 5 分钟后才放行
+    state.elapsedMs = 29 * SECOND_MS + 310 * SECOND_MS;
+    handler.userLock();
+    assert.strictEqual(userLockCalls.length, 1, "延长窗口过期后放行");
   } finally {
     delete global.__HUGO_AURA_CONFIG_MGR__;
   }

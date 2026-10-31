@@ -12,6 +12,15 @@
  * 在管家处理前打开资源管理器窗口, 且不消费消息 (管家原有的提示窗口/查杀
  * 流程不受影响)。
  *
+ * 快速检测 (为什么有两条路径): 1003 由本地病毒服务周期性推送 (真机实测
+ * 约 20 秒一份), 被动等待的话插入后要等 20 多秒才打开。因此本钩子在主进程
+ * 用 kernel32.GetLogicalDrives 主动轮询盘符位图 —— 借用管家自带的 ffi 模块
+ * (windowsApiFfi.dll 同源), 纯内存操作, 不像 fs.existsSync 那样可能在
+ * 未就绪设备上阻塞主进程; 新出现的可移动驱动器 (GetDriveTypeA ==
+ * DRIVE_REMOVABLE) 立即打开。1003 路径保留作兜底 (ffi 不可用时), 且会跳过
+ * 观察器刚打开过的盘 —— 推送延迟 (~20s) 远大于跨进程去重的 5 秒窗口,
+ * 不跳过的话同一个 U 盘会被打开两次。
+ *
  * 打开方式: 必须走 ShellExecute (electron.shell.openPath), 与管家原生
  * openExternal → windowsApiFfi.dll OpenItem 同源。不可使用 explorer.exe
  * 命令行: 实测 `explorer.exe C:/` (正斜杠) 与不存在的路径都会被静默改写为
@@ -38,11 +47,46 @@ const {
 
 const USB_HANDLER_MODULE_ID = 141; // 病毒服务消息处理器 (USB_LIST)
 const USB_LIST_MESSAGE_TYPE = 1003; // USB_LIST
+const FFI_MODULE_ID = 42; // 管家 bundle 自带的 ffi 模块 (windowsApiFfi.dll 同源)
 
 // 同一驱动器在该时间窗内只打开一次 (跨窗口/跨进程去重)
 const OPEN_DEDUPE_MS = 5000;
 
-const hookFn = (central) => {
+// >>> 快速盘符检测器 <<<
+const FAST_POLL_INTERVAL_MS = 1500;
+const DRIVE_REMOVABLE = 2; // kernel32 GetDriveTypeA: DRIVE_REMOVABLE
+// 观察器打开记录的有效期: 1003 慢推送 (~20s) 在此窗口内不再重复打开
+const WATCHER_OPEN_TTL_MS = 60 * 1000;
+// 新驱动器等待就绪的重试上限 (U 盘挂载需要零点几秒到几秒): 10 次 x 1.5s
+const WATCHER_MAX_TRIES = 10;
+
+// 模块级: 观察器只启动一次 (每个窗口进程都会加载本钩子)。同一进程内多次
+// 窗口初始化会创建多个 hookFn 闭包, 打开记录放模块级才能全进程共享。
+let fastWatcherStarted = false;
+/** @type {Map<string, number>} 观察器已打开的驱动器 -> 时间戳 */
+const watcherOpenedAt = new Map();
+// shouldAutoOpen 的短缓存: 轮询每 1.5s 一次, 不必每次都读配置。
+// null 表示尚未读取 (不能假定时钟起点是真实 epoch, 首次调用必须刷新)
+let autoOpenCfgCache = null;
+
+/**
+ * 盘符位图 -> 驱动器根路径 (bit0=A ... bit25=Z)
+ * @param {number} mask kernel32.GetLogicalDrives 返回值
+ * @returns {string[]} 形如 ["C:\\", "D:\\"]
+ */
+const maskToDrives = (mask) => {
+  const drives = [];
+  const m = mask >>> 0;
+  for (let i = 0; i < 26; i++) {
+    if (m & (1 << i)) drives.push(`${String.fromCharCode(65 + i)}:\\`);
+  }
+  return drives;
+};
+
+const hookFn = (central, deps = {}) => {
+  // 驱动器就绪探测可注入 (单测用); 生产走真实 fs。注意仅探测走它,
+  // claimOpen 的锁文件始终用真实 fs。
+  const driveFs = deps.driveFs || fs;
   let diagLogged = false;
 
   const readConfig = () => {
@@ -67,6 +111,14 @@ const hookFn = (central) => {
         config.networkRewrite["appearance/autoOpenUsb"] &&
         config.networkRewrite["appearance/autoOpenUsb"].enabled
     );
+  };
+
+  // 轮询用的短缓存版开关判定 (5s 内不重复读配置)
+  const shouldAutoOpenCached = (now) => {
+    if (!autoOpenCfgCache || now - autoOpenCfgCache.at > 5000) {
+      autoOpenCfgCache = { at: now, enabled: shouldAutoOpen() };
+    }
+    return autoOpenCfgCache.enabled;
   };
 
   /**
@@ -124,7 +176,43 @@ const hookFn = (central) => {
   };
 
   /**
-   * 打开驱动器 (ShellExecute 通道)。
+   * ShellExecute 打开驱动器根目录 (打开动作本体, 前置校验由调用方完成)。
+   *
+   * @param {string} drivePath 规范化后的驱动器路径 ("E:\\")
+   * @param {string} rawPath 原始路径 (仅用于日志)
+   */
+  const openDriveByShell = (drivePath, rawPath) => {
+    try {
+      const { shell } = central(1);
+      Promise.resolve(shell.openPath(drivePath)).then(
+        (errMsg) => {
+          if (errMsg) {
+            console.warn(
+              `[HugoAura / AutoOpenUsb] Failed to open "${drivePath}": ${errMsg}`
+            );
+          } else {
+            console.log(
+              `[HugoAura / AutoOpenUsb] Opened drive in Explorer: ${drivePath} (raw: "${rawPath}")`
+            );
+          }
+        },
+        (err) => {
+          console.warn(
+            `[HugoAura / AutoOpenUsb] Failed to open "${drivePath}":`,
+            err
+          );
+        }
+      );
+    } catch (err) {
+      console.warn(
+        `[HugoAura / AutoOpenUsb] Failed to open drive ${drivePath}:`,
+        err
+      );
+    }
+  };
+
+  /**
+   * 打开驱动器 (1003 慢速兜底路径使用)。
    *
    * 打开前校验路径可用性: 服务端可能下发设备路径等无法直接打开的形态,
    * 若照直传给系统会得到"打开了别的东西"这类静默错误, 因此校验不过就
@@ -158,33 +246,17 @@ const hookFn = (central) => {
       return;
     }
 
-    try {
-      const { shell } = central(1);
-      Promise.resolve(shell.openPath(drivePath)).then(
-        (errMsg) => {
-          if (errMsg) {
-            console.warn(
-              `[HugoAura / AutoOpenUsb] Failed to open "${drivePath}": ${errMsg}`
-            );
-          } else {
-            console.log(
-              `[HugoAura / AutoOpenUsb] Opened drive in Explorer: ${drivePath} (raw: "${rawPath}")`
-            );
-          }
-        },
-        (err) => {
-          console.warn(
-            `[HugoAura / AutoOpenUsb] Failed to open "${drivePath}":`,
-            err
-          );
-        }
-      );
-    } catch (err) {
-      console.warn(
-        `[HugoAura / AutoOpenUsb] Failed to open drive ${drivePath}:`,
-        err
-      );
-    }
+    openDriveByShell(drivePath, rawPath);
+  };
+
+  /**
+   * 观察器打开记录查询: 该盘是否刚被快速观察器打开过。
+   * @param {string} drivePath 规范化后的驱动器路径
+   * @param {number} now
+   */
+  const wasOpenedByWatcher = (drivePath, now) => {
+    const at = watcherOpenedAt.get(drivePath);
+    return typeof at === "number" && now - at < WATCHER_OPEN_TTL_MS;
   };
 
   /**
@@ -217,13 +289,137 @@ const hookFn = (central) => {
           String((d && d.path) || "")
         )
       : [];
+    const now = Date.now();
 
     diskList.forEach((/** @type {any} */ disk) => {
       const drivePath = String((disk && disk.path) || "");
       if (drivePath && knownPaths.indexOf(drivePath) === -1) {
+        // 快速观察器已打开过的盘: 1003 慢推送到达时不再重复打开
+        if (wasOpenedByWatcher(normalizeDiskPath(drivePath), now)) {
+          console.debug(
+            `[HugoAura / AutoOpenUsb] ${drivePath} already opened by fast watcher, skip USB_LIST echo.`
+          );
+          return;
+        }
         openInExplorer(drivePath);
       }
     });
+  };
+
+  /**
+   * 观察器的打开尝试。新盘符出现时卷可能尚未就绪 (U 盘挂载需要零点几秒
+   * 到几秒), existsSync 不过就返回 false 留给下个 tick 重试; 就绪后走与
+   * 1003 路径同一套 claimOpen 去重 + ShellExecute 打开。
+   *
+   * @param {string} drivePath 驱动器根路径 ("E:\\")
+   * @returns {boolean} true=已处理 (打开/去重跳过/路径非法) / false=未就绪需重试
+   */
+  const tryOpenDrive = (drivePath) => {
+    // 该功能只应打开本地 U 盘根目录 (与 1003 路径同一校验)
+    if (!/^[A-Za-z]:\\$/.test(drivePath)) return true;
+    if (!driveFs.existsSync(drivePath)) return false;
+
+    const claimed = claimOpen(drivePath);
+    // 无论本窗口是否抢到打开权都登记时间: 本进程的 1003 兜底路径据此跳过
+    watcherOpenedAt.set(drivePath, Date.now());
+
+    if (claimed) {
+      openDriveByShell(drivePath, drivePath);
+    } else {
+      console.debug(
+        `[HugoAura / AutoOpenUsb] ${drivePath} already opened by another window, skip.`
+      );
+    }
+    return true;
+  };
+
+  /**
+   * 快速盘符检测器 (每个窗口进程启动一次)。
+   * ffi/kernel32 不可用时直接返回, 保留 1003 被动路径作为兜底。
+   */
+  const startFastWatcher = () => {
+    if (fastWatcherStarted) return;
+    fastWatcherStarted = true;
+
+    let getLogicalDrives = null;
+    let getDriveType = null;
+    try {
+      const ffi = resolveModule(central, FFI_MODULE_ID);
+      if (ffi && typeof ffi.Library === "function") {
+        const lib = ffi.Library("kernel32", {
+          GetLogicalDrives: ["uint32", []],
+          GetDriveTypeA: ["uint32", ["string"]],
+        });
+        getLogicalDrives = lib.GetLogicalDrives;
+        getDriveType = lib.GetDriveTypeA;
+      }
+    } catch (err) {
+      console.warn(
+        "[HugoAura / AutoOpenUsb] Failed to bind kernel32 via ffi:",
+        err
+      );
+    }
+    if (
+      typeof getLogicalDrives !== "function" ||
+      typeof getDriveType !== "function"
+    ) {
+      console.warn(
+        "[HugoAura / AutoOpenUsb] Fast drive watcher unavailable, falling back to USB_LIST pushes only."
+      );
+      return;
+    }
+
+    console.log(
+      `[HugoAura / AutoOpenUsb] Fast drive watcher started (poll ${FAST_POLL_INTERVAL_MS}ms).`
+    );
+
+    let primed = false;
+    let knownMask = 0;
+    let failures = 0;
+    /** @type {Map<string, number>} 新发现待就绪的驱动器 -> 剩余重试次数 */
+    const pendingOpens = new Map();
+
+    const timer = setInterval(() => {
+      try {
+        if (!shouldAutoOpenCached(Date.now())) return;
+
+        const mask = getLogicalDrives() >>> 0;
+        if (!primed) {
+          // 首帧只登记快照: 启动时已插着的 U 盘不自动打开 (与 1003 首帧保护同义)
+          primed = true;
+          knownMask = mask;
+          return;
+        }
+
+        const newMask = mask & ~knownMask;
+        knownMask = mask;
+
+        for (const drivePath of maskToDrives(newMask)) {
+          if (getDriveType(drivePath) === DRIVE_REMOVABLE) {
+            pendingOpens.set(drivePath, WATCHER_MAX_TRIES);
+          }
+        }
+        for (const [drivePath, tries] of pendingOpens) {
+          if (tryOpenDrive(drivePath) || tries <= 1) {
+            pendingOpens.delete(drivePath);
+          } else {
+            pendingOpens.set(drivePath, tries - 1);
+          }
+        }
+      } catch (err) {
+        failures += 1;
+        if (failures >= 5) {
+          console.error(
+            "[HugoAura / AutoOpenUsb] Fast watcher stopped after repeated failures:",
+            err
+          );
+          clearInterval(timer);
+        } else {
+          console.warn("[HugoAura / AutoOpenUsb] Fast watcher tick failed:", err);
+        }
+      }
+    }, FAST_POLL_INTERVAL_MS);
+    if (timer && typeof timer.unref === "function") timer.unref();
   };
 
   // 单次安装尝试: 成功返回 true, 模块未就绪返回 false (触发重试)
@@ -277,6 +473,8 @@ const hookFn = (central) => {
       console.log(
         `[HugoAura / AutoOpenUsb] Interceptor installed (module ${USB_HANDLER_MODULE_ID}).`
       );
+      // 快速检测器与 1003 路径并行: 前者负责秒开, 后者兜底
+      startFastWatcher();
     }
     return installed;
   };
@@ -285,4 +483,10 @@ const hookFn = (central) => {
   withRetry(tryInstall, { label: "AutoOpenUsb" })();
 };
 
-module.exports = { hookFunc: hookFn };
+module.exports = {
+  hookFunc: hookFn,
+  maskToDrives,
+  FAST_POLL_INTERVAL_MS,
+  WATCHER_OPEN_TTL_MS,
+  DRIVE_REMOVABLE,
+};

@@ -13,6 +13,7 @@
  */
 
 const UPDATE_IPC_BASE = "$aura.update";
+const BASE_IPC_BASE = "$aura.base";
 const FALLBACK_RELEASES_URL =
   "https://github.com/blingbling-bow/HugoAura-Enhanced/releases";
 const REPO_URL = "https://github.com/blingbling-bow/HugoAura-Enhanced";
@@ -86,6 +87,7 @@ const FEATURES = [
   { done: true, text: "阻止希沃管家前端 Audit 上报行为" },
   { done: true, text: "屏蔽屏幕锁 / 自定义屏幕锁行为" },
   { done: true, text: "禁用屏幕保护" },
+  { done: true, text: "自定义屏保图片 (SeewoAbility 屏保图替换 / 自动备份还原)" },
   { done: true, text: "禁止希沃管家自动更新" },
   { done: true, text: "阻止远程关机" },
   { done: true, text: "阻止远程锁屏" },
@@ -93,7 +95,7 @@ const FEATURES = [
   { done: true, text: "指令审计 (全通道云端指令留痕 / 未知指令高亮 / 导出 JSONL)" },
   { done: false, text: "Aura 代理层服务 (篡改上报数据 / 欺骗冰冻状态)" },
   { done: false, text: "窥屏提醒 (检测方式在部分环境无法识别窥屏进程, 当前版本已停用)" },
-  { done: false, text: "插件功能" },
+  { done: true, text: "插件功能 (本地导入 / 主进程与界面插件 / 插件管理页)" },
 ];
 
 const buildFeaturesHtml = () =>
@@ -285,6 +287,26 @@ const initAboutSubPage = () => {
   if (!aboutSubPageEl) return;
 
   aboutSubPageEl.innerHTML = aboutContent;
+
+  // 链接点击接管: 页面注入在管家 DOM 里, <a target="_blank"> 跳转会被
+  // Electron 吞掉 (没有 window.open 处理), 直接 href 跳转则会导航走管家
+  // 窗口 —— 统一 preventDefault 后交主进程经安全校验用系统浏览器打开。
+  aboutSubPageEl.addEventListener("click", (event) => {
+    const target = event.target;
+    const linkEl =
+      target && typeof target.closest === "function"
+        ? target.closest('a[href^="http"]')
+        : null;
+    if (!linkEl) return;
+    const url = linkEl.getAttribute("href") || "";
+    if (!url) return;
+    event.preventDefault();
+    global.ipcRenderer
+      .invoke(`${BASE_IPC_BASE}.openExternal`, { url })
+      .catch((err) =>
+        console.error("[HugoAura / About] Open external failed:", err)
+      );
+  });
 
   const statusEl = document.getElementById("auraUpdateStatus");
   const checkBtn = document.getElementById("auraUpdateCheckBtn");
