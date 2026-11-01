@@ -1218,3 +1218,28 @@
 .aura-market-modal-foot .aura-audit-btn + .aura-audit-btn {
   margin-left: 0.5rem;
 }
+
+/* 安装确认弹窗: 风险确认勾选行 */
+.aura-market-perm-ack {
+  display: flex;
+  align-items: center;
+  margin-top: 0.7rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid rgba(15, 23, 42, 0.15);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.aura-market-perm-ack label {
+  margin-left: 0.5rem;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.8);
+  cursor: pointer;
+  user-select: none;
+}
+
+.aura-market-perm-ack .form-check-input {
+  flex: 0 0 auto;
+  margin: 0;
+  cursor: pointer;
+}

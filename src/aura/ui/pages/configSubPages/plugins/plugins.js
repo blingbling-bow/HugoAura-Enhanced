@@ -164,13 +164,62 @@
       </div>
     </div>`;
 
-  /** manifest 摘要确认弹窗 (本地导入 / 在线导入共用的第二段) */
+  /** 权限 key → 展示信息 (manifest 未提供 label/description 时的兜底) */
+  const PERMISSION_INFO = {
+    storage: { label: "私有存储", desc: "读写插件自己的持久化设置 (≤256KB)" },
+    events: { label: "事件总线", desc: "订阅/发布插件自己命名空间内的事件" },
+    network: { label: "联网请求", desc: "经安全校验的 HTTP GET (禁内网/localhost, ≤1MB/10s)" },
+    notify: { label: "全局通知", desc: "弹出 Aura 置顶提醒小窗" },
+    shortcuts: { label: "全局快捷键", desc: "注册系统级快捷键 (≤8 个, 卸载自动注销)" },
+  };
+
+  /** 安装确认弹窗的权限清单 (main 按声明, ui 为类型内建能力) */
+  const permRowsHtml = (manifest) => {
+    if (manifest.type === "ui") {
+      return `
+        <div class="aura-market-perm-row">
+          <div class="aura-market-perm-info">
+            <p class="aura-market-perm-name">声明式 DOM 桥</p>
+            <p class="aura-market-perm-desc">在页面上创建/修改悬浮元素 (标签/属性/事件白名单, 真实节点不进沙箱)</p>
+          </div>
+        </div>
+        <div class="aura-market-perm-row">
+          <div class="aura-market-perm-info">
+            <p class="aura-market-perm-name">$aura.plugin.* 白名单 IPC</p>
+            <p class="aura-market-perm-desc">读取插件列表与自身配置 (跨插件读写已被沙箱禁止)</p>
+          </div>
+        </div>`;
+    }
+    const perms = Array.isArray(manifest.permissions) ? manifest.permissions : [];
+    if (!perms.length) {
+      return '<p class="aura-market-perm-desc" style="padding:2px 0;">未申请任何可选能力 (仅配置快照 / 日志 / 定时器)。</p>';
+    }
+    return perms
+      .map((p) => {
+        const info = PERMISSION_INFO[p.key] || {
+          label: `${p.key} (未识别, 默认不授予)`,
+          desc: "",
+        };
+        const desc = p.description || info.desc || "";
+        return `
+          <div class="aura-market-perm-row">
+            <div class="aura-market-perm-info">
+              <p class="aura-market-perm-name">${escapeMarketHtml(info.label)}</p>
+              <p class="aura-market-perm-desc">${escapeMarketHtml(desc)}</p>
+            </div>
+          </div>`;
+      })
+      .join("");
+  };
+
+  /** manifest 摘要确认弹窗 (本地导入 / 在线导入共用的第二段):
+   *  权限清单 + 风险确认勾选 (未勾选时确认按钮禁用) */
   const confirmModalHtml = (manifest) => `
     <div class="aura-market-modal" id="auraMarketModal">
       <div class="aura-market-modal-card">
         <button type="button" class="aura-market-modal-close" data-modal-action="close">×</button>
         <p class="aura-market-modal-title">确认安装插件</p>
-        <p class="aura-market-modal-subtitle">安装前请核对插件信息</p>
+        <p class="aura-market-modal-subtitle">安装前请核对插件信息与权限</p>
         <div class="aura-market-modal-body">
           <div class="aura-market-manifest-meta">
             <p class="meta-key">名称</p><p class="meta-val">${escapeMarketHtml(manifest.name)}</p>
@@ -179,7 +228,21 @@
             <p class="meta-key">类型</p><p class="meta-val">${TYPE_NAMES[manifest.type] || "未知"}</p>
             <p class="meta-key">标识</p><p class="meta-val">${escapeMarketHtml(manifest.id)}</p>
           </div>
-          <p>插件代码拥有与 Aura 相同的权限, 可访问设备数据并执行任意操作。请确认来源可信后再安装。</p>
+          <div class="aura-market-detail-section">
+            <p class="aura-market-detail-label">插件将获得的权限</p>
+            ${permRowsHtml(manifest)}
+          </div>
+          <p>插件在 vm 能力沙箱中运行 (无 require / fs / process)，但沙箱是强化而非硬边界。
+             勾选确认即表示你已了解上述权限与插件代码的潜在风险。</p>
+          <div class="aura-market-perm-ack">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              role="switch"
+              id="auraPluginRiskAck"
+            />
+            <label for="auraPluginRiskAck">我已知悉上述权限与风险, 同意安装</label>
+          </div>
         </div>
         <div class="aura-market-modal-foot">
           <button type="button" class="aura-audit-btn" data-modal-action="cancel">取消</button>
@@ -187,6 +250,7 @@
             type="button"
             class="aura-audit-btn aura-market-btn-light"
             data-modal-action="confirm-install"
+            disabled
           >确认安装</button>
         </div>
       </div>
@@ -975,6 +1039,12 @@
       } else if (action === "start") {
         startUrlInstall();
       } else if (action === "confirm-install") {
+        // 风险确认勾选保护: 未勾选时确认按钮本已禁用, 此处再兜底一层
+        const ackEl = document.getElementById("auraPluginRiskAck");
+        if (ackEl && !ackEl.checked) {
+          console.warn("[HugoAura / Market] 请先勾选风险确认后再安装");
+          return;
+        }
         confirmInstall();
       } else if (action === "confirm-remove") {
         const targetId = modal.getAttribute("data-remove-id") || "";
