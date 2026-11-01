@@ -249,6 +249,21 @@
   color: rgba(0, 0, 0, 0.5);
 }
 
+/* 导入/导出配置: 按钮行 + 状态文字 */
+.aura-about-config-io {
+  display: flex;
+  align-items: center;
+  margin-top: 0.55rem;
+  padding: 0 0.7rem 0.2rem;
+}
+
+.aura-about-config-io-status {
+  margin-left: 0.75rem;
+  font-size: 12px;
+  color: var(--audit-success);
+  word-break: break-all;
+}
+
 /* 功能清单 (与 README 保持一致): 两栏排布, 已完成的打蓝绿勾 */
 .aura-about-features {
   display: flex;
