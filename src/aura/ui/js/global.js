@@ -249,7 +249,7 @@
     });
   })();
 
-  /* ===== 渲染层插件加载 (ui 类型, 详见 pluginIpcHandler/pluginManager) ===== */
+  /* ===== 渲染层插件加载 (ui 类型, vm 能力沙箱: 声明式 DOM 桥 + IPC 白名单) ===== */
   (async () => {
     try {
       if (!global.ipcRenderer)
@@ -266,25 +266,68 @@
       if (!auraDir) return;
 
       const nodePath = require("path");
+      const nodeFs = require("fs");
+
+      // 渲染层脚本相对 require 的基准有两种 (文档 / 脚本自身), 候选列表兜底
+      let uiSandbox = null;
+      const sandboxCandidates = [
+        "../../aura/ui/js/pluginUiSandbox",
+        "../../../ui/js/pluginUiSandbox",
+      ];
+      for (const candidate of sandboxCandidates) {
+        try {
+          const mod = require(candidate);
+          if (mod && typeof mod.runUiPlugin === "function") {
+            uiSandbox = mod;
+            break;
+          }
+        } catch (_err) {
+          // 该基准不可用, 尝试下一个
+        }
+      }
+      if (!uiSandbox) {
+        console.error("[HugoAura / UIPlugin] 沙箱模块加载失败, 跳过 UI 插件加载");
+        return;
+      }
+
+      const runs = [];
       for (const item of res.data || []) {
         if (item.type !== "ui" || item.enabled !== true) continue;
         try {
-          // 插件代码与 Aura 同权限运行 (无沙箱), 启用开关在插件管理页
-          const instance = require(
-            nodePath.join(auraDir, "plugins", item.id, item.main)
-          );
-          if (instance && typeof instance.onLoad === "function") {
-            instance.onLoad({
-              manifest: item,
-              auraVersion: global.__HUGO_AURA__ && global.__HUGO_AURA__.version,
-              ipcRenderer: global.ipcRenderer,
-            });
+          const mainPath = nodePath.join(auraDir, "plugins", item.id, item.main);
+          const source = nodeFs.readFileSync(mainPath, "utf8");
+          const run = uiSandbox.runUiPlugin({
+            source,
+            manifest: item,
+            auraVersion: global.__HUGO_AURA__ && global.__HUGO_AURA__.version,
+            document,
+            ipcInvoke: (channel, payload) =>
+              global.ipcRenderer.invoke(channel, payload),
+            log: (level, line) =>
+              console.log(`[HugoAura / UIPlugin:${item.id}] ${line}`),
+          });
+          if (run.instance && typeof run.instance.onLoad === "function") {
+            run.instance.onLoad(run.ctx);
           }
-          console.log(`[HugoAura / UIPlugin] Loaded: ${item.id} v${item.version}`);
+          runs.push({ id: item.id, dispose: run.dispose });
+          console.log(
+            `[HugoAura / UIPlugin] Loaded (sandbox): ${item.id} v${item.version}`
+          );
         } catch (err) {
           console.error(`[HugoAura / UIPlugin] Failed to load ${item.id}:`, err);
         }
       }
+
+      // 页面卸载/导航时回收沙箱资源 (定时器 + 插件创建的节点)
+      window.addEventListener("beforeunload", () => {
+        for (const run of runs) {
+          try {
+            run.dispose();
+          } catch (_err) {
+            /* 回收失败不影响卸载 */
+          }
+        }
+      });
     } catch (err) {
       console.error("[HugoAura / UIPlugin] Plugin bootstrap failed:", err);
     }

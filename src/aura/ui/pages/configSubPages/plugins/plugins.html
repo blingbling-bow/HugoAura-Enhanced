@@ -1,0 +1,174 @@
+<div
+  id="acs-plugins-root-el"
+  class="aura-config-subpage-plugins-root acs-plugins-root-hidden"
+>
+  <div class="aura-settings-form aura-market-form">
+    <header class="aura-market-hero">
+      <div class="aura-market-hero-brand">
+        <span class="aura-market-hero-logo"><svg class="aura-market-svg" viewBox="0 0 24 24" aria-hidden="true"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
+        <div class="aura-market-hero-text">
+          <p class="aura-market-hero-title">
+            插件<span class="aura-market-beta-badge">Beta</span>
+          </p>
+          <p class="aura-market-hero-desc">
+            通过第三方插件扩展 Aura 能力：安装、启停、配置与卸载都在这一页完成。
+          </p>
+        </div>
+      </div>
+      <div class="aura-market-hero-stats">
+        <span class="aura-market-hero-stat"
+          ><span>已安装</span><b id="auraMarketStatInstalled">—</b></span
+        >
+        <span class="aura-market-hero-stat"
+          ><span>已启用</span><b id="auraMarketStatEnabled">—</b></span
+        >
+      </div>
+    </header>
+
+    <p class="aura-market-section-title">导入插件</p>
+
+    <section class="aura-market-warning">
+      <p class="aura-market-warning-title"><span class="aura-market-warning-icon"><svg class="aura-market-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>安装前往意安全风险</p>
+      <p class="aura-market-warning-body">
+        主进程插件在 vm 能力沙箱中运行：沙箱内没有 require / fs / process /
+        管家内部模块，仅暴露 manifest、只读配置快照、日志、定时器，以及
+        manifest 声明的 storage / events / network 能力（联网经安全校验）。
+        UI 插件仅获得声明式 DOM 桥与 $aura.plugin.* 白名单 IPC，真实节点不进沙箱。
+        卸载时强制回收定时器与 DOM。沙箱是强化而非硬边界：恶意插件仍可能尝试
+        逃逸，请仅安装可信来源的插件。
+      </p>
+    </section>
+
+    <section class="aura-audit-panel aura-market-install-panel">
+      <span class="aura-market-install-icon"><svg class="aura-market-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+      <div class="aura-market-install-info">
+        <p class="aura-market-install-title">从本地或在线安装</p>
+        <p class="aura-market-install-desc">
+          通过插件扩展软件功能，安装包为 zip 格式（内含 manifest.json 与
+          main.js），详见
+          <a
+            class="aura-market-link"
+            data-market-doc="plugin-doc"
+            href="https://github.com/blingbling-bow/HugoAura-Enhanced"
+            >插件文档</a
+          >
+        </p>
+      </div>
+      <div class="aura-market-install-actions">
+        <button
+          id="auraMarketImportLocalBtn"
+          type="button"
+          class="aura-audit-btn"
+        >
+          本地导入
+        </button>
+        <button
+          id="auraMarketImportUrlBtn"
+          type="button"
+          class="aura-audit-btn aura-about-btn-accent"
+        >
+          在线导入
+        </button>
+      </div>
+    </section>
+
+    <section class="aura-market-manage-section">
+      <p class="aura-market-section-title">插件管理</p>
+      <ul class="nav nav-underline aura-market-tabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link active"
+            id="aura-market-installed-tab"
+            data-bs-toggle="pill"
+            data-bs-target="#aura-market-installed-pane"
+            type="button"
+            role="tab"
+            aria-controls="aura-market-installed-pane"
+            aria-selected="true"
+          >
+            已安装
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            id="aura-market-market-tab"
+            data-bs-toggle="pill"
+            data-bs-target="#aura-market-market-pane"
+            type="button"
+            role="tab"
+            aria-controls="aura-market-market-pane"
+            aria-selected="false"
+          >
+            插件市场
+          </button>
+        </li>
+      </ul>
+      <div class="tab-content">
+        <div
+          class="tab-pane fade show active"
+          id="aura-market-installed-pane"
+          role="tabpanel"
+          aria-labelledby="aura-market-installed-tab"
+        >
+          <div
+            class="aura-market-cards"
+            id="auraMarketCards"
+          ></div>
+          <div
+            class="aura-market-empty"
+            id="auraMarketEmpty"
+            style="display: none"
+          >
+            <div class="aura-market-empty-icon"><svg class="aura-market-svg" viewBox="0 0 24 24" aria-hidden="true"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
+            <p class="aura-market-empty-title">还没有安装任何插件</p>
+            <p class="aura-market-empty-desc">
+              点击上方「本地导入」选择插件 zip 包，或使用「在线导入」从 URL 安装。
+            </p>
+          </div>
+        </div>
+        <div
+          class="tab-pane fade"
+          id="aura-market-market-pane"
+          role="tabpanel"
+          aria-labelledby="aura-market-market-tab"
+        >
+          <div class="aura-market-cards" id="auraMarketMarketCards"></div>
+          <div
+            class="aura-market-empty"
+            id="auraMarketMarketStatus"
+            style="display: none"
+          >
+            <div class="aura-market-empty-icon" id="auraMarketMarketStatusIcon"></div>
+            <p class="aura-market-empty-title" id="auraMarketMarketStatusTitle"></p>
+            <p class="aura-market-empty-desc" id="auraMarketMarketStatusDesc"></p>
+            <button
+              type="button"
+              class="aura-audit-btn aura-about-btn-accent"
+              id="auraMarketRetryBtn"
+              style="display: none"
+            >
+              重新加载
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="aura-market-footer">
+      <span>想分享你的插件？</span>
+      <a
+        class="aura-market-link"
+        data-market-doc="publish"
+        href="https://github.com/blingbling-bow/HugoAura-Enhanced"
+        ><svg class="aura-market-svg aura-market-svg-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>前往发布</a
+      >
+      <a
+        class="aura-market-link"
+        data-market-doc="doc"
+        href="https://github.com/blingbling-bow/HugoAura-Enhanced"
+        ><svg class="aura-market-svg aura-market-svg-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>插件文档</a
+      >
+    </footer>
+  </div>
+</div>

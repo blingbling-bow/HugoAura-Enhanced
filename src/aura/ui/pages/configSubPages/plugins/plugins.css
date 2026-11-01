@@ -1,0 +1,1245 @@
+/* 插件市场子页样式 (aura-market-*) —— 浅色主题, 与审计 / 关于子页同一设计语言:
+   半透明白英雄区 (--audit-surface) + 白色面板 + 主题蓝强调色。
+   注意: 本页只加载自己的 CSS (另有全局 form.css 的 .aura-settings-form 内边距),
+   preferences.css 不可用 —— 设计变量与用到的组件 (.aura-audit-btn /
+   .aura-audit-panel / .aura-about-btn-accent) 在此自备一份。
+   兼容约束: 管家内置 Chromium 较老 —— 间距一律用 margin 不用 flex gap;
+   grid 的 gap 允许; 不用 :has(); 不用 inset / min(); 弹窗用 absolute 挂
+   .aura-config-page-root (position: fixed 会被外层 transform 劫持)。 */
+
+.aura-config-subpage-plugins-root {
+  opacity: 1;
+  transition: opacity 0.5s;
+}
+
+.aura-config-subpage-plugins-root.acs-plugins-root-hidden {
+  opacity: 0;
+}
+
+/* ===== 设计变量 (与 preferences.css 的 .aura-settings-form 同一套配色) ===== */
+
+.aura-settings-form.aura-market-form {
+  --audit-bg: #ffffff;
+  --audit-panel: #ffffff;
+  --audit-panel-2: #f8f9fa;
+  --audit-surface: rgba(255, 255, 255, 0.55);
+  --audit-surface-2: rgba(255, 255, 255, 0.9);
+  --audit-border: rgba(15, 23, 42, 0.1);
+  --audit-border-strong: rgba(15, 23, 42, 0.2);
+  --audit-text: rgba(0, 0, 0, 0.8);
+  --audit-muted: rgba(0, 0, 0, 0.5);
+  --audit-primary: #218fff;
+  --audit-primary-strong: #1b7fe6;
+  --audit-danger: #dc2626;
+  --audit-warning: #d97706;
+  --audit-info: #0891b2;
+  --audit-success: #059669;
+  --audit-purple: #7c3aed;
+  --audit-gray: #94a3b8;
+  --audit-mono: "Cascadia Mono", "Consolas", "SFMono-Regular", Menlo, monospace;
+
+  padding: 0.85rem 1rem 1.25rem;
+  /* 子页容器自带 rgba(255,255,255,.825) 底色, 本页保持透明 (与审计页一致) */
+  background: transparent;
+  border-radius: 12px;
+  color: var(--audit-text);
+}
+
+/* ===== 组件 (自备: .aura-audit-btn / .aura-audit-panel) ===== */
+
+.aura-market-form .aura-audit-btn,
+.aura-market-modal .aura-audit-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.34rem 0.7rem;
+  font-size: 0.76rem;
+  line-height: 1.2;
+  color: var(--audit-text);
+  background: var(--audit-bg);
+  border: 1px solid var(--audit-border-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, color 0.15s,
+    box-shadow 0.15s, transform 0.08s;
+}
+
+.aura-market-form .aura-audit-btn:hover,
+.aura-market-modal .aura-audit-btn:hover {
+  background: var(--audit-surface-2);
+  border-color: var(--audit-primary);
+  color: var(--audit-primary);
+}
+
+.aura-market-form .aura-audit-btn:active,
+.aura-market-modal .aura-audit-btn:active {
+  transform: translateY(1px);
+}
+
+.aura-market-form .aura-audit-btn:disabled,
+.aura-market-modal .aura-audit-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.aura-market-form .aura-audit-btn-danger,
+.aura-market-modal .aura-audit-btn-danger {
+  color: var(--audit-danger);
+  border-color: rgba(220, 38, 38, 0.35);
+}
+
+.aura-market-form .aura-audit-btn-danger:hover,
+.aura-market-modal .aura-audit-btn-danger:hover {
+  color: #fff;
+  background: var(--audit-danger);
+  border-color: var(--audit-danger);
+}
+
+/* 键盘可达性: 老 Chromium 不支持 :focus-visible 时该规则整条失效, 无副作用 */
+.aura-market-form .aura-audit-btn:focus-visible,
+.aura-market-modal .aura-audit-btn:focus-visible,
+.aura-market-form .aura-market-link:focus-visible,
+.aura-market-modal .aura-market-link:focus-visible,
+.aura-market-form .nav-link:focus-visible {
+  outline: 2px solid rgba(33, 143, 255, 0.55);
+  outline-offset: 1px;
+}
+
+/* 强调按钮 (在线导入 / 市场安装 / 开始下载 / 确认安装 / 保存): 主题蓝实底 */
+.aura-market-form .aura-about-btn-accent,
+.aura-market-form .aura-market-btn-accent,
+.aura-market-form .aura-market-btn-light,
+.aura-market-modal .aura-about-btn-accent,
+.aura-market-modal .aura-market-btn-accent,
+.aura-market-modal .aura-market-btn-light {
+  color: #fff;
+  background: linear-gradient(180deg, #2f9bff, #1b7fe6);
+  border-color: var(--audit-primary-strong);
+  box-shadow: 0 2px 8px -2px rgba(33, 143, 255, 0.55);
+}
+
+.aura-market-form .aura-about-btn-accent:hover,
+.aura-market-form .aura-market-btn-accent:hover,
+.aura-market-form .aura-market-btn-light:hover,
+.aura-market-modal .aura-about-btn-accent:hover,
+.aura-market-modal .aura-market-btn-accent:hover,
+.aura-market-modal .aura-market-btn-light:hover {
+  color: #fff;
+  background: linear-gradient(180deg, #3da4ff, #2b8cf2);
+  border-color: var(--audit-primary-strong);
+  box-shadow: 0 3px 12px -2px rgba(33, 143, 255, 0.65);
+}
+
+.aura-market-form .aura-about-btn-accent:disabled,
+.aura-market-form .aura-market-btn-light:disabled,
+.aura-market-modal .aura-market-btn-light:disabled {
+  color: #fff;
+  background: linear-gradient(180deg, #8ec8ff, #7ab7f0);
+  border-color: rgba(33, 143, 255, 0.4);
+  box-shadow: none;
+}
+
+.aura-market-form .aura-audit-panel {
+  margin-top: 0.75rem;
+  background: var(--audit-panel);
+  border: 1px solid var(--audit-border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05),
+    0 10px 30px -22px rgba(15, 23, 42, 0.4);
+}
+
+/* ===== 内联 SVG 图标 ===== */
+
+.aura-market-svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -2px;
+}
+
+.aura-market-svg-sm {
+  width: 12px;
+  height: 12px;
+  vertical-align: -1.5px;
+}
+
+/* ===== 页头 (与 .aura-audit-hero / .aura-about-hero 同构) ===== */
+
+.aura-market-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 0.7rem 0.9rem;
+  background: var(--audit-surface);
+  border: 1px solid var(--audit-border);
+  border-radius: 12px;
+}
+
+.aura-market-hero-brand {
+  display: flex;
+  align-items: center;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+/* 图标砖: 主题蓝渐变, 与关于页 logo 砖同一处理 */
+.aura-market-hero-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  margin-right: 0.7rem;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(135deg, #218fff 0%, #3fbaff 100%);
+  box-shadow: 0 6px 16px -6px rgba(33, 143, 255, 0.6);
+}
+
+.aura-market-hero-logo .aura-market-svg {
+  width: 21px;
+  height: 21px;
+  stroke-width: 1.9;
+}
+
+.aura-market-hero-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.aura-market-hero-title {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--audit-text);
+}
+
+.aura-market-hero-desc {
+  margin: 0.2rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  color: var(--audit-muted);
+}
+
+/* 页头右侧: 已安装 / 已启用 计数 (数据由 plugins.js 填充) */
+.aura-market-hero-stats {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  margin-left: 0.75rem;
+}
+
+.aura-market-hero-stat {
+  display: inline-flex;
+  align-items: baseline;
+  padding: 0.2rem 0.55rem;
+  background: var(--audit-surface-2);
+  border: 1px solid var(--audit-border);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.aura-market-hero-stat + .aura-market-hero-stat {
+  margin-left: 0.4rem;
+}
+
+.aura-market-hero-stat b {
+  font-family: var(--audit-mono);
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--audit-primary);
+}
+
+.aura-market-hero-stat span {
+  margin-right: 0.32rem;
+  font-size: 0.72rem;
+  color: var(--audit-muted);
+}
+
+/* ===== 分节标题 ===== */
+
+.aura-market-section-title {
+  display: flex;
+  align-items: center;
+  margin: 1.1rem 0 10px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--audit-text);
+}
+
+.aura-market-section-title::before {
+  content: "";
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  margin-right: 8px;
+  background: linear-gradient(180deg, #3fbaff, #1b7fe6);
+}
+
+/* 首个分节标题紧贴页头, 不再重复大间距 */
+.aura-market-form .aura-market-hero + .aura-market-section-title {
+  margin-top: 1rem;
+}
+
+.aura-market-beta-badge {
+  margin-left: 0.5rem;
+  padding: 1px 8px;
+  border: 1px solid rgba(33, 143, 255, 0.4);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  color: var(--audit-primary);
+  background: rgba(33, 143, 255, 0.1);
+}
+
+/* ===== 安全警示横幅 (琥珀色, 左侧色条 + 图标砖) ===== */
+
+.aura-market-warning {
+  position: relative;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border: 1px solid rgba(217, 119, 6, 0.32);
+  border-left: 4px solid rgba(217, 119, 6, 0.75);
+  border-radius: 10px;
+  background: rgba(255, 244, 222, 0.92);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+
+.aura-market-warning-title {
+  display: flex;
+  align-items: center;
+  margin: 0 0 4px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #92400e;
+}
+
+.aura-market-warning-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin-right: 8px;
+  border-radius: 7px;
+  color: #b45309;
+  background: rgba(217, 119, 6, 0.16);
+}
+
+.aura-market-warning-icon .aura-market-svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.2;
+}
+
+.aura-market-warning-body {
+  margin: 0 0 0 30px;
+  font-size: 0.75rem;
+  line-height: 1.65;
+  color: #a16207;
+}
+
+/* ===== 安装区 (本地 / 在线) ===== */
+
+.aura-market-install-panel {
+  display: flex;
+  align-items: center;
+  padding: 13px 16px;
+}
+
+.aura-market-install-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  margin-right: 12px;
+  border-radius: 10px;
+  background: rgba(33, 143, 255, 0.12);
+  color: var(--audit-primary);
+}
+
+.aura-market-install-icon .aura-market-svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.8;
+}
+
+.aura-market-install-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.aura-market-install-title {
+  margin: 0 0 3px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--audit-text);
+}
+
+.aura-market-install-desc {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--audit-muted);
+}
+
+.aura-market-install-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  margin-left: 0.75rem;
+}
+
+.aura-market-install-actions .aura-audit-btn + .aura-audit-btn {
+  margin-left: 0.5rem;
+}
+
+/* ===== tabs (已安装 / 插件市场): 分段控件, 保留 bootstrap pill 行为 ===== */
+
+.aura-market-manage-section {
+  margin-top: 1.1rem;
+}
+
+.aura-market-manage-section .aura-market-section-title {
+  margin-top: 0;
+}
+
+.aura-market-form .aura-market-tabs {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  margin-bottom: 0.85rem;
+  background: var(--audit-surface);
+  border: 1px solid var(--audit-border);
+  border-radius: 10px;
+}
+
+.aura-market-form .aura-market-tabs .nav-link {
+  position: relative;
+  margin: 0;
+  padding: 0.3rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--audit-muted);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  transition: color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+/* 关掉 .nav-underline 的下划线指示条 (分段控件自带选中态) */
+.aura-market-form .aura-market-tabs .nav-link::after {
+  display: none;
+}
+
+.aura-market-form .aura-market-tabs .nav-link:hover {
+  color: var(--audit-primary);
+}
+
+.aura-market-form .aura-market-tabs .nav-link.active {
+  color: var(--audit-text);
+  background: var(--audit-panel);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08),
+    0 4px 10px -8px rgba(15, 23, 42, 0.4);
+}
+
+/* ===== 卡片网格 ===== */
+
+.aura-market-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (max-width: 760px) {
+  .aura-market-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* 卡片: 纵向布局, 操作行贴底 —— 同一行卡片等高 */
+.aura-market-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--audit-border);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff, #fcfdff);
+  padding: 12px 14px 11px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04),
+    0 6px 18px -12px rgba(15, 23, 42, 0.25);
+  transition: transform 0.18s ease, box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+
+/* 已启用插件: 左侧 3px 状态条 (与审计表格行的严重度色条同一处理) */
+.aura-market-card[data-on="true"] {
+  box-shadow: inset 3px 0 0 var(--audit-success),
+    0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 18px -12px rgba(15, 23, 42, 0.25);
+}
+
+.aura-market-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(33, 143, 255, 0.45);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06),
+    0 16px 32px -16px rgba(15, 23, 42, 0.3);
+}
+
+.aura-market-card[data-on="true"]:hover {
+  box-shadow: inset 3px 0 0 var(--audit-success),
+    0 4px 10px rgba(15, 23, 42, 0.06),
+    0 16px 32px -16px rgba(15, 23, 42, 0.3);
+}
+
+.aura-market-card.is-selected {
+  border-color: var(--audit-primary);
+  box-shadow: 0 0 0 3px rgba(33, 143, 255, 0.12),
+    0 10px 26px -14px rgba(15, 23, 42, 0.35);
+}
+
+.aura-market-card.is-selected[data-on="true"] {
+  box-shadow: inset 3px 0 0 var(--audit-success),
+    0 0 0 3px rgba(33, 143, 255, 0.12),
+    0 10px 26px -14px rgba(15, 23, 42, 0.35);
+}
+
+/* 卡片头: 名称 + 外链 + 版本 + 激活状态 */
+.aura-market-card-head {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.aura-market-card-name {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--audit-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aura-market-card-home {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  color: var(--audit-gray);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.15s;
+}
+
+.aura-market-card-home:hover {
+  color: var(--audit-primary);
+}
+
+.aura-market-card-version {
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-family: var(--audit-mono);
+  font-size: 0.7rem;
+  color: var(--audit-muted);
+  background: var(--audit-panel-2);
+  border: 1px solid var(--audit-border);
+  white-space: nowrap;
+}
+
+/* 激活状态 pill: 前置状态点, 启用绿色 / 未启用灰色 */
+.aura-market-state-pill {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin-left: 8px;
+  font-size: 0.72rem;
+  color: var(--audit-gray);
+}
+
+.aura-market-state-pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+.aura-market-state-pill[data-on="true"] {
+  color: var(--audit-success);
+}
+
+/* 市场卡片: 可更新 —— 琥珀色提示, 与「未启用」的灰色区分 */
+.aura-market-state-pill[data-tone="warning"] {
+  color: var(--audit-warning);
+}
+
+/* 描述: 两行截断, 固定两行高度保证同行卡片对齐 */
+.aura-market-card-desc {
+  margin: 0 0 8px;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--audit-muted);
+  min-height: 2.6em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.aura-market-card-author {
+  display: flex;
+  align-items: center;
+  font-size: 0.72rem;
+  color: var(--audit-muted);
+}
+
+.aura-market-card-author .aura-market-svg {
+  width: 12px;
+  height: 12px;
+  margin-right: 5px;
+  color: var(--audit-gray);
+}
+
+/* 卡片操作行: 上方分隔线 + 贴底 (margin-top: auto), 间距用 margin (老 Chromium 无 flex gap) */
+.aura-market-card-actions {
+  display: flex;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--audit-border);
+}
+
+.aura-market-card .aura-market-card-author {
+  margin-bottom: 10px;
+}
+
+.aura-market-card-actions .aura-audit-btn + .aura-audit-btn {
+  margin-left: 0.4rem;
+}
+
+.aura-market-card-actions .aura-market-svg {
+  margin-right: 5px;
+}
+
+/* 启停按钮: 启用时绿色淡底 (与状态 pill 同一语义) */
+.aura-market-form .aura-audit-btn.aura-market-btn-toggle[data-on="true"] {
+  color: var(--audit-success);
+  background: rgba(5, 150, 105, 0.08);
+  border-color: rgba(5, 150, 105, 0.45);
+}
+
+.aura-market-form .aura-audit-btn.aura-market-btn-toggle[data-on="true"]:hover {
+  color: var(--audit-success);
+  background: rgba(5, 150, 105, 0.14);
+  border-color: rgba(5, 150, 105, 0.6);
+}
+
+.aura-market-form .aura-audit-btn.aura-market-btn-more {
+  margin-left: auto !important;
+  background: transparent;
+  border-color: transparent;
+  color: var(--audit-muted);
+}
+
+.aura-market-form .aura-audit-btn.aura-market-btn-more:hover {
+  background: var(--audit-surface-2) !important;
+  border-color: transparent !important;
+  color: var(--audit-text) !important;
+}
+
+.aura-market-card-menu {
+  min-width: 8.5rem;
+  background: var(--audit-panel);
+  border-color: var(--audit-border-strong);
+  box-shadow: 0 10px 28px -10px rgba(15, 23, 42, 0.35);
+}
+
+.aura-market-card-menu .dropdown-item {
+  color: var(--audit-text);
+  font-size: 0.76rem;
+  padding: 0.4rem 0.9rem;
+}
+
+.aura-market-card-menu .dropdown-item:hover {
+  background: var(--audit-panel-2);
+  color: var(--audit-text);
+}
+
+.aura-market-card-menu .dropdown-item[data-action="remove"] {
+  color: var(--audit-danger);
+}
+
+.aura-market-card-menu .dropdown-item[data-action="remove"]:hover {
+  background: rgba(220, 38, 38, 0.08);
+}
+
+/* ===== 空状态 / 市场状态条 ===== */
+
+.aura-market-empty {
+  padding: 32px 16px;
+  text-align: center;
+  background: var(--audit-surface);
+  border: 1px dashed var(--audit-border-strong);
+  border-radius: 12px;
+}
+
+.aura-market-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 10px;
+  border-radius: 18px;
+  background: rgba(33, 143, 255, 0.1);
+  color: var(--audit-primary);
+}
+
+.aura-market-empty-icon .aura-market-svg {
+  width: 26px;
+  height: 26px;
+  stroke-width: 1.6;
+}
+
+.aura-market-empty-title {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--audit-text);
+}
+
+.aura-market-empty-desc {
+  margin: 0 0 0;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--audit-muted);
+}
+
+/* 空状态里的按钮 (重新加载) 单独留出上间距 */
+.aura-market-empty .aura-audit-btn {
+  margin-top: 12px;
+}
+
+/* ===== 页脚 ===== */
+
+.aura-market-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--audit-border);
+  font-size: 0.75rem;
+  color: var(--audit-muted);
+}
+
+.aura-market-footer .aura-market-link {
+  display: inline-flex;
+  align-items: center;
+}
+
+.aura-market-footer .aura-market-link + .aura-market-link {
+  margin-left: 14px;
+}
+
+.aura-market-footer .aura-market-svg {
+  margin-right: 5px;
+}
+
+.aura-market-link {
+  color: var(--audit-primary);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.aura-market-link:hover {
+  text-decoration: underline;
+}
+
+/* ===== 弹窗 (在线导入 / 安装确认 / 插件配置 / 插件详情 / 卸载确认):
+       absolute 挂 .aura-config-page-root; 变量取不到, 重复声明一份
+       不透明浅色子集 ===== */
+
+.aura-market-modal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.44);
+  --audit-bg: #ffffff;
+  --audit-panel: #ffffff;
+  --audit-panel-2: #f8f9fa;
+  --audit-surface: #f1f5f9;
+  --audit-surface-2: #e2e8f0;
+  --audit-border: rgba(15, 23, 42, 0.12);
+  --audit-border-strong: rgba(15, 23, 42, 0.22);
+  --audit-text: rgba(0, 0, 0, 0.85);
+  --audit-muted: rgba(0, 0, 0, 0.55);
+  --audit-primary: #218fff;
+  --audit-primary-strong: #1b7fe6;
+  --audit-danger: #dc2626;
+  --audit-warning: #d97706;
+  --audit-success: #059669;
+  --audit-gray: #94a3b8;
+  --audit-mono: "Cascadia Mono", "Consolas", "SFMono-Regular", Menlo, monospace;
+  animation: aura-market-scrim 0.16s ease-out;
+}
+
+@keyframes aura-market-scrim {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes aura-market-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* position: relative —— 关闭按钮 (×) 锚定在卡片右上角, 而不是整个遮罩 */
+.aura-market-modal-card {
+  position: relative;
+  width: 480px;
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--audit-border);
+  border-radius: 14px;
+  background: var(--audit-panel);
+  padding: 16px 18px 14px;
+  box-shadow: 0 24px 60px -12px rgba(15, 23, 42, 0.45);
+  animation: aura-market-pop 0.18s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aura-market-modal,
+  .aura-market-modal-card {
+    animation: none;
+  }
+}
+
+.aura-market-modal-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--audit-muted);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.aura-market-modal-close:hover {
+  color: var(--audit-text);
+  background: var(--audit-surface-2);
+}
+
+.aura-market-modal-title {
+  margin: 0 0 4px;
+  padding-right: 28px; /* 让出关闭按钮的位置 */
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--audit-text);
+}
+
+.aura-market-modal-subtitle {
+  margin: 0 0 12px;
+  padding-right: 28px;
+  font-size: 0.75rem;
+  color: var(--audit-muted);
+}
+
+.aura-market-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1px solid var(--audit-border);
+  font-size: 0.75rem;
+  line-height: 1.65;
+  color: var(--audit-muted);
+}
+
+.aura-market-modal-body > p {
+  margin: 0 0 9px;
+}
+
+.aura-market-modal-body > p:last-child {
+  margin-bottom: 0;
+}
+
+/* 详情弹窗的分节标题 (简介 / 权限 / 能力 / 信息) */
+.aura-market-detail-section {
+  margin: 0 0 14px;
+}
+
+.aura-market-detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.aura-market-detail-label {
+  margin: 0 0 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--audit-muted);
+}
+
+.aura-market-detail-desc {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--audit-text);
+}
+
+/* 详情头部: 插件名 + 版本 pill + 主页链接 */
+.aura-market-detail-section .aura-market-card-name {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.86rem;
+  white-space: normal;
+}
+
+.aura-market-detail-section .aura-market-link {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 4px;
+  font-size: 0.75rem;
+}
+
+.aura-market-detail-section .aura-market-card-version {
+  margin-left: 6px;
+}
+
+/* 权限行: 图标 + 名称/描述 + 开关 */
+.aura-market-perm-row {
+  display: flex;
+  align-items: center;
+  margin: 0 0 8px;
+  padding: 9px 12px;
+  border: 1px solid var(--audit-border);
+  border-radius: 10px;
+  background: var(--audit-panel-2);
+}
+
+.aura-market-perm-row:last-child {
+  margin-bottom: 0;
+}
+
+.aura-market-perm-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  margin-right: 10px;
+  border-radius: 9px;
+  background: rgba(33, 143, 255, 0.1);
+  color: var(--audit-primary);
+}
+
+.aura-market-perm-icon .aura-market-svg {
+  width: 15px;
+  height: 15px;
+}
+
+.aura-market-perm-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.aura-market-perm-name {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--audit-text);
+}
+
+.aura-market-perm-desc {
+  margin: 0;
+  font-size: 0.7rem;
+  line-height: 1.5;
+  color: var(--audit-muted);
+}
+
+/* 能力/信息 的键值行 */
+.aura-market-cap-row {
+  display: flex;
+  align-items: baseline;
+  margin: 0 0 6px;
+  font-size: 0.75rem;
+}
+
+.aura-market-cap-row:last-child {
+  margin-bottom: 0;
+}
+
+.aura-market-cap-key {
+  flex: 0 0 auto;
+  color: var(--audit-muted);
+  margin-right: 10px;
+}
+
+.aura-market-cap-val {
+  color: var(--audit-text);
+}
+
+/* 信息区双列网格 */
+.aura-market-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  row-gap: 7px;
+  column-gap: 12px;
+  font-size: 0.75rem;
+}
+
+.aura-market-info-grid .aura-market-cap-key {
+  margin-right: 6px;
+}
+
+.aura-market-info-grid .aura-market-cap-val {
+  color: var(--audit-text);
+  font-family: var(--audit-mono);
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 安装确认弹窗的 manifest 摘要 (键值两列网格) */
+.aura-market-manifest-meta {
+  display: grid;
+  grid-template-columns: 4.2em minmax(0, 1fr);
+  row-gap: 7px;
+  column-gap: 10px;
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--audit-border);
+  border-radius: 10px;
+  background: var(--audit-panel-2);
+}
+
+.aura-market-manifest-meta .meta-key {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--audit-muted);
+}
+
+.aura-market-manifest-meta .meta-val {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--audit-text);
+  word-break: break-all;
+}
+
+/* 配置行: 标签左 + 控件右 */
+.aura-market-config-row {
+  display: flex;
+  align-items: center;
+  margin: 0 0 10px;
+  padding: 11px 14px;
+  border: 1px solid var(--audit-border);
+  border-radius: 10px;
+  background: var(--audit-panel-2);
+}
+
+.aura-market-config-row:last-child {
+  margin-bottom: 0;
+}
+
+.aura-market-config-row-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-right: 12px;
+}
+
+.aura-market-config-row-label {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--audit-text);
+}
+
+.aura-market-config-row-desc {
+  margin: 2px 0 0;
+  font-size: 0.7rem;
+  color: var(--audit-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aura-market-config-row-control {
+  flex: 0 0 auto;
+  width: 190px;
+}
+
+.aura-market-config-input,
+.aura-market-config-select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--audit-border-strong);
+  border-radius: 8px;
+  background: var(--audit-bg);
+  color: var(--audit-text);
+  font-size: 0.75rem;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.aura-market-config-input:focus,
+.aura-market-config-select:focus {
+  border-color: var(--audit-primary);
+  box-shadow: 0 0 0 3px rgba(33, 143, 255, 0.15);
+}
+
+.aura-market-config-input::placeholder {
+  color: rgba(0, 0, 0, 0.35);
+}
+
+/* 配置行内的 bootstrap 开关配色 */
+.aura-market-config-row .form-check-input,
+.aura-market-modal .form-check-input {
+  cursor: pointer;
+  width: 2.2em;
+  height: 1.2em;
+}
+
+.aura-market-config-row .form-check-input:checked,
+.aura-market-modal .form-check-input:checked {
+  background-color: var(--audit-success);
+  border-color: var(--audit-success);
+}
+
+.aura-market-modal .form-check-input:focus {
+  border-color: var(--audit-success);
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.18);
+}
+
+/* 在线导入的 URL 输入 */
+.aura-market-url-input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--audit-border-strong);
+  border-radius: 9px;
+  background: var(--audit-bg);
+  color: var(--audit-text);
+  font-family: var(--audit-mono);
+  font-size: 0.75rem;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.aura-market-url-input:focus {
+  border-color: var(--audit-primary);
+  box-shadow: 0 0 0 3px rgba(33, 143, 255, 0.15);
+}
+
+.aura-market-url-input::placeholder {
+  font-family: inherit;
+  color: rgba(0, 0, 0, 0.35);
+}
+
+/* 下载进度 */
+.aura-market-progress-track {
+  margin: 12px 0 4px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--audit-surface-2);
+  overflow: hidden;
+}
+
+.aura-market-progress-bar {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2f9bff, #1b7fe6);
+  transition: width 0.2s ease;
+}
+
+/* 弹窗页脚: 与正文用分隔线分开 */
+.aura-market-modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--audit-border);
+}
+
+.aura-market-modal-foot .aura-audit-btn + .aura-audit-btn {
+  margin-left: 0.5rem;
+}
+
+/* 安装确认弹窗: 风险确认勾选行 */
+.aura-market-perm-ack {
+  display: flex;
+  align-items: center;
+  margin-top: 0.7rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid rgba(15, 23, 42, 0.15);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.aura-market-perm-ack label {
+  margin-left: 0.5rem;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.8);
+  cursor: pointer;
+  user-select: none;
+}
+
+.aura-market-perm-ack .form-check-input {
+  flex: 0 0 auto;
+  margin: 0;
+  cursor: pointer;
+}
