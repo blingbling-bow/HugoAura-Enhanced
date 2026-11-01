@@ -11,7 +11,7 @@
       "description": "验证主进程插件沙箱: 无 require/fs/central, 配置只读快照 / 私有设置 / 自命名空间事件 / 心跳与卸载回收。",
       "type": "main",
       "homepage": "https://github.com/blingbling-bow/HugoAura-Enhanced",
-      "downloadUrl": "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Enhanced@dev/src/aura/market/packages/aura-test-main.zip",
+      "downloadUrl": "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Market@main/packages/com.aura.test.main.zip",
       "sha256": "cec5bd1257cb5c91b78a82270499a81263d9f2d1d1d95353178b4e0e9b721f25"
     },
     {
@@ -22,7 +22,7 @@
       "description": "验证 UI 插件沙箱: 声明式 DOM 桥 (真实节点不进沙箱) + $aura.plugin.* IPC 白名单。",
       "type": "ui",
       "homepage": "https://github.com/blingbling-bow/HugoAura-Enhanced",
-      "downloadUrl": "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Enhanced@dev/src/aura/market/packages/aura-test-ui.zip",
+      "downloadUrl": "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Market@main/packages/com.aura.test.ui.zip",
       "sha256": "fbbc70ea3a493ee7c5624ca4409083f1543ed88fc9e998fdd3c7335d21d6c97a"
     },
     {
@@ -33,7 +33,7 @@
       "description": "屏幕悬浮倒计时面板: 3/5/10 分钟快捷预设, 点击开始/暂停, 时间到红色闪烁提醒。适合课堂练习、课间管理与考试计时。",
       "type": "ui",
       "homepage": "https://github.com/blingbling-bow/HugoAura-Enhanced",
-      "downloadUrl": "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Enhanced@feature/plugins/src/aura/market/packages/com.aura.countdown.zip",
+      "downloadUrl": "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Market@main/packages/com.aura.countdown.zip",
       "sha256": "783b503c23c2cfed5aae9adaee4bf3d84725d0cc00011a5dbf4266c74fe34ef9"
     }
   ]

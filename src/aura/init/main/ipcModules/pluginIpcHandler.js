@@ -37,12 +37,10 @@ const INSTALL_PROGRESS_CHANNEL = "$aura.plugin.post.installProgress";
 const DOWNLOAD_MAX_REDIRECTS = 5;
 const STAGE_TTL_MS = 30 * 60 * 1000;
 
-/** 市场清单数据源 (按顺序尝试): jsDelivr 对国内网络更友好, raw 兜底, 最后包内本地文件 (离线可用) */
+/** 市场清单数据源 (按顺序尝试): 独立市场仓库 (jsDelivr 对国内友好) → raw 兜底 → 包内本地文件 (离线可用) */
 const MARKET_SOURCES = [
-  "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Enhanced@dev/src/aura/market/plugins.json",
-  // 插件功能尚未合并到 dev 时的过渡源 (合并后此条 404 会自动跳过)
-  "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Enhanced@feature/plugins/src/aura/market/plugins.json",
-  "https://raw.githubusercontent.com/blingbling-bow/HugoAura-Enhanced/dev/src/aura/market/plugins.json",
+  "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Market@main/plugins.json",
+  "https://raw.githubusercontent.com/blingbling-bow/HugoAura-Market/main/plugins.json",
 ];
 /** 本地源标识 (非 URL, fetchMarketManifest 按此走文件读取) */
 const MARKET_LOCAL_SOURCE = "local";
