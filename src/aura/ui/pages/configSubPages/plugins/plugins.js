@@ -805,7 +805,11 @@
         `${IPC_BASE}.${isLocal ? "installFromPath" : "installFromUrl"}`,
         isLocal
           ? { path: entry.downloadUrl }
-          : { url: entry.downloadUrl, reportTo: "assistant" }
+          : {
+              url: entry.downloadUrl,
+              sha256: entry.sha256,
+              reportTo: "assistant",
+            }
       );
       if (res && res.success) {
         // 同上: closeModal 置空 stageId, 顺序必须是先关弹窗再暂存

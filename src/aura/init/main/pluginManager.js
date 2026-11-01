@@ -209,6 +209,15 @@ const writePluginSettings = (pluginDir, values) => {
 const buildSandboxDeps = (manifest, pluginDir) => {
   const storageDir = path.join(pluginDir, "storage");
   fs.mkdirSync(storageDir, { recursive: true });
+  // electron 懒加载: 单测环境无 electron, 缺失时 notify/shortcuts 报 NOT_AVAILABLE
+  let electron = null;
+  let alertWindowHook = null;
+  try {
+    electron = require("electron");
+    alertWindowHook = require("../../mainProcess/hooks/alertWindow");
+  } catch (err) {
+    electron = null;
+  }
   return {
     settingsApi: {
       get: () => readPluginSettings(pluginDir),
@@ -237,6 +246,19 @@ const buildSandboxDeps = (manifest, pluginDir) => {
         }
       },
     },
+    notifyApi:
+      electron && alertWindowHook && typeof alertWindowHook.showAlertWindow === "function"
+        ? (record) => alertWindowHook.showAlertWindow(electron, record)
+        : null,
+    shortcutsApi:
+      electron && electron.globalShortcut
+        ? {
+            register: (accelerator, cb) =>
+              electron.globalShortcut.register(accelerator, cb),
+            unregister: (accelerator) =>
+              electron.globalShortcut.unregister(accelerator),
+          }
+        : null,
     storageDir,
   };
 };

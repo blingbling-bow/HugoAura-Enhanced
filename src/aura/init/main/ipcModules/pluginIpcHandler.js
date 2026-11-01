@@ -20,6 +20,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const crypto = require("crypto");
 const nodeHttp = require("http");
 const nodeHttps = require("https");
 
@@ -59,6 +60,28 @@ let marketCache = null;
 const stagedInstalls = new Map();
 
 const pluginsRoot = () => path.join(global.__HUGO_AURA__.auraDir, "plugins");
+
+/**
+ * 校验文件 sha256 (expected 为 64 位 hex; 未提供则跳过; 不匹配抛错)。
+ * 市场安装链的完整性校验: 清单与包同源分发, 校验的是"清单↔包"一致性,
+ * 防止 CDN 缓存污染 / 下载截断 / 半更新的清单指向旧包。
+ * @param {string} filePath
+ * @param {string | undefined} expected
+ */
+const verifyFileSha256 = (filePath, expected) => {
+  if (!expected) return true;
+  if (typeof expected !== "string" || !/^[0-9a-fA-F]{64}$/.test(expected)) {
+    throw new Error("INVALID_SHA256");
+  }
+  const actual = crypto
+    .createHash("sha256")
+    .update(fs.readFileSync(filePath))
+    .digest("hex");
+  if (actual !== expected.toLowerCase()) {
+    throw new Error(`SHA256_MISMATCH: actual ${actual.slice(0, 16)}…`);
+  }
+  return true;
+};
 
 // >>> 旧运行时兼容 (管家 Node 可能 < 16.7, 无 fs.rmSync / fs.cpSync) <<<
 // 仓库既有代码均只用老 API (unlinkSync/copyFileSync), 此处保持一致。
@@ -538,6 +561,8 @@ const applyPluginIpcHandler = (ipcMain) => {
      */
     async (_event, arg) => {
       const url = arg && typeof arg.url === "string" ? arg.url.trim() : "";
+      const expectedSha256 =
+        arg && typeof arg.sha256 === "string" ? arg.sha256 : "";
       const reportTo = (arg && arg.reportTo) || "assistant";
       const report = (payload) => {
         try {
@@ -565,6 +590,9 @@ const applyPluginIpcHandler = (ipcMain) => {
             totalBytes: p.totalBytes,
           })
         );
+
+        // 清单声明了 sha256 时做完整性校验 (CDN 缓存污染 / 下载截断防护)
+        verifyFileSha256(zipPath, expectedSha256);
 
         report({ stage: "extract", progress: 0 });
         const { stageId, manifest } = stagePluginZip(zipPath);
@@ -747,6 +775,7 @@ const applyPluginIpcHandler = (ipcMain) => {
 
 module.exports = {
   applyPluginIpcHandler,
+  verifyFileSha256,
   // 测试导出: 暂存清理与暂存表 (锁定 "只删暂存目录本身" 的回归语义)
   pruneStaleStages,
   stagedInstalls,

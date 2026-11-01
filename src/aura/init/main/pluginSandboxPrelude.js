@@ -127,6 +127,25 @@ var __prelude = (function () {
     };
   }
 
+  // [notify 权限] 独立提醒小窗 (Aura 全局置顶弹窗, 不抢焦点)
+  if (grant("notify")) {
+    ctx.notify = function (title, message, durationMs) {
+      return host.invoke("notify", [String(title || ""), String(message || ""), Number(durationMs) || 5000]);
+    };
+  }
+
+  // [shortcuts 权限] 全局快捷键 (≤8 个, 卸载时宿主强制注销)
+  if (grant("shortcuts")) {
+    ctx.shortcuts = {
+      register: function (accelerator, cb) {
+        return host.invoke("shortcutRegister", [String(accelerator || ""), cb]);
+      },
+      unregister: function (id) {
+        return host.invoke("shortcutUnregister", [Number(id)]);
+      },
+    };
+  }
+
   // ---- 删除宿主入口, 关闭 .constructor 逃逸路径 ----
   delete __host;
   delete __grant;

@@ -63,6 +63,8 @@ const MANIFEST = {
     { key: "storage", label: "存储" },
     { key: "events", label: "事件" },
     { key: "network", label: "联网" },
+    { key: "notify", label: "通知" },
+    { key: "shortcuts", label: "快捷键" },
   ],
 };
 
@@ -282,6 +284,82 @@ test("沙箱: settings 读写往返 + storage 权限拒绝", () => {
   store2.cleanup();
 });
 
+test("沙箱 v2: notify 与 shortcuts (权限门控 + dispose 注销)", () => {
+  const store = makeStorage();
+  const collector = makeLogCollector();
+  const notifyCalls = [];
+  const registered = [];
+  const unregistered = [];
+
+  const run = runMainPlugin({
+    source: `
+      var r = {};
+      ctx.notify("测试标题", "测试内容", 8000);
+      r.shortcutId = ctx.shortcuts.register("Ctrl+Shift+T", function () {});
+      r.hasNet = typeof ctx.net;
+      ctx.logger.log("V2 " + JSON.stringify(r));
+      module.exports = {};
+    `,
+    manifest: MANIFEST,
+    settingsApi: store.settingsApi,
+    busApi: { on() {}, off() {}, emit() {} },
+    notifyApi: (record) => {
+      notifyCalls.push(record);
+      return true;
+    },
+    shortcutsApi: {
+      register: (acc, cb) => {
+        registered.push({ acc, cb });
+        return true;
+      },
+      unregister: (acc) => {
+        unregistered.push(acc);
+        return true;
+      },
+    },
+    log: collector.log,
+  });
+  run.instance.onLoad && run.instance.onLoad(run.ctx);
+
+  assert.match(collector.joined(), /V2 .*"hasNet":"object"/);
+  assert.equal(notifyCalls.length, 1);
+  assert.equal(notifyCalls[0].title, "测试标题");
+  assert.equal(notifyCalls[0].body, "测试内容");
+  assert.match(notifyCalls[0].source, /插件: com\.sandbox\.test/);
+  assert.equal(registered.length, 1);
+  assert.equal(registered[0].acc, "Ctrl+Shift+T");
+  assert.equal(typeof registered[0].cb, "function");
+
+  // dispose: 快捷键必须全量注销
+  run.dispose();
+  assert.deepEqual(unregistered, ["Ctrl+Shift+T"]);
+  store.cleanup();
+});
+
+test("沙箱 v2: 未声明 notify/shortcuts 时能力不存在", () => {
+  const store = makeStorage();
+  const collector = makeLogCollector();
+  const run = runMainPlugin({
+    source: `
+      ctx.logger.log("V2ABSENT " + JSON.stringify({
+        notify: typeof ctx.notify,
+        shortcuts: typeof ctx.shortcuts,
+      }));
+      module.exports = {};
+    `,
+    manifest: { ...MANIFEST, permissions: [{ key: "storage", label: "存储" }] },
+    settingsApi: store.settingsApi,
+    busApi: { on() {}, off() {}, emit() {} },
+    log: collector.log,
+  });
+  run.instance.onLoad && run.instance.onLoad(run.ctx);
+  assert.match(
+    collector.joined(),
+    /V2ABSENT \{"notify":"undefined","shortcuts":"undefined"\}/
+  );
+  store.cleanup();
+});
+
 test("resolveGrantedPermissions: 去重 + 过滤未支持权限", () => {
   const granted = resolveGrantedPermissions({
     permissions: [
@@ -292,5 +370,11 @@ test("resolveGrantedPermissions: 去重 + 过滤未支持权限", () => {
     ],
   });
   assert.deepEqual(granted, ["storage", "network"]);
-  assert.deepEqual(SUPPORTED_PERMISSIONS, ["storage", "network", "events"]);
+  assert.deepEqual(SUPPORTED_PERMISSIONS, [
+    "storage",
+    "network",
+    "events",
+    "notify",
+    "shortcuts",
+  ]);
 });

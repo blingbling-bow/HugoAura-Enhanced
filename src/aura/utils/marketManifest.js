@@ -38,6 +38,11 @@ const sanitizeMarketEntry = (entry) => {
     type: entry.type === "ui" ? "ui" : "main",
     homepage: /^https:\/\//i.test(homepage) ? homepage : "",
     downloadUrl,
+    // sha256 可选: 清单与包同源分发, 校验"清单↔包"一致性 (CDN 污染/截断防护)
+    sha256:
+      typeof entry.sha256 === "string" && /^[0-9a-fA-F]{64}$/.test(entry.sha256)
+        ? entry.sha256.toLowerCase()
+        : undefined,
   };
 };
 

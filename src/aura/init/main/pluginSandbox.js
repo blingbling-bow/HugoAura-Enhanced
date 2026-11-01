@@ -24,7 +24,7 @@ const MAX_LOG_CHARS = 2000;
 const NET_MAX_BYTES = 1024 * 1024;
 const NET_TIMEOUT_MS = 10000;
 const SETTINGS_MAX_BYTES = 256 * 1024;
-const SUPPORTED_PERMISSIONS = ["storage", "network", "events"];
+const SUPPORTED_PERMISSIONS = ["storage", "network", "events", "notify", "shortcuts"];
 
 const PRELUDE_PATH = path.join(__dirname, "pluginSandboxPrelude.js");
 
@@ -63,6 +63,8 @@ const runMainPlugin = (options) => {
     settingsApi,
     busApi,
     log = () => {},
+    notifyApi,
+    shortcutsApi,
   } = options || {};
 
   const pluginId = String((manifest && manifest.id) || "unknown-plugin");
@@ -197,6 +199,59 @@ const runMainPlugin = (options) => {
   // ---- 事件回调包装注册表 (busOn/busOff 用同一 wrapped 配对) ----
   const busWrappers = [];
 
+  // ---- 宿主能力: 快捷键 (globalShortcut 包装, dispose 全量注销) ----
+  const shortcutEntries = [];
+  let shortcutSeq = 0;
+  const ACCELERATOR_RE = /^[A-Za-z0-9+ ]{1,64}$/;
+  const shortcutRegister = (accelerator, cb) => {
+    if (!shortcutsApi || typeof shortcutsApi.register !== "function") {
+      throw new Error("NOT_AVAILABLE");
+    }
+    if (typeof accelerator !== "string" || !ACCELERATOR_RE.test(accelerator)) {
+      throw new Error("INVALID_ACCELERATOR");
+    }
+    if (shortcutEntries.length >= 8) {
+      log("warn", "快捷键数量已达上限 (8)");
+      return null;
+    }
+    if (typeof cb !== "function") throw new Error("CALLBACK_REQUIRED");
+    const registered = shortcutsApi.register(accelerator, cb);
+    if (!registered) return null;
+    const id = ++shortcutSeq;
+    shortcutEntries.push({ id, accelerator });
+    return id;
+  };
+  const shortcutUnregister = (id) => {
+    const entry = shortcutEntries.find((e) => e.id === Number(id));
+    if (!entry) return false;
+    try {
+      if (shortcutsApi && typeof shortcutsApi.unregister === "function") {
+        shortcutsApi.unregister(entry.accelerator);
+      }
+    } catch (err) {
+      log("warn", `快捷键注销失败: ${err && err.message ? err.message : err}`);
+    }
+    shortcutEntries.splice(shortcutEntries.indexOf(entry), 1);
+    return true;
+  };
+
+  // ---- 宿主能力: 通知 (alertWindow, 权限 notify; 标题/来源由插件提供,
+  //      防伪造: type 恒为 notify, 时长钳制 3s-60s) ----
+  const pluginNotify = (title, message, durationMs) => {
+    if (!notifyApi || typeof notifyApi !== "function") {
+      throw new Error("NOT_AVAILABLE");
+    }
+    const t = String(title || "").trim();
+    if (!t) throw new Error("TITLE_REQUIRED");
+    return notifyApi({
+      title: t.slice(0, 120),
+      body: String(message || "").slice(0, 300),
+      source: `插件: ${pluginId}`,
+      ts: new Date().toISOString(),
+      durationMs: Number(durationMs) || 5000,
+    });
+  };
+
   // ---- 单入口分发 (宿主函数; 权限二次校验) ----
   const invoke = (method, args) => {
     switch (method) {
@@ -261,6 +316,15 @@ const runMainPlugin = (options) => {
       case "netFetch":
         if (!granted.includes("network")) throw new Error("PERMISSION_DENIED: network");
         return netFetch(String(args[0]));
+      case "notify":
+        if (!granted.includes("notify")) throw new Error("PERMISSION_DENIED: notify");
+        return pluginNotify(String(args[0] || ""), args[1], args[2]);
+      case "shortcutRegister":
+        if (!granted.includes("shortcuts")) throw new Error("PERMISSION_DENIED: shortcuts");
+        return shortcutRegister(args[0], args[1]);
+      case "shortcutUnregister":
+        if (!granted.includes("shortcuts")) throw new Error("PERMISSION_DENIED: shortcuts");
+        return shortcutUnregister(args[0]);
       default:
         throw new Error(`UNKNOWN_HOST_METHOD: ${method}`);
     }
@@ -305,6 +369,14 @@ const runMainPlugin = (options) => {
       clearTimeout(t);
     }
     timers.clear();
+    // 快捷键是进程级全局资源, 卸载必须全量注销
+    for (const entry of [...shortcutEntries]) {
+      try {
+        shortcutUnregister(entry.id);
+      } catch (err) {
+        log("warn", `dispose 注销快捷键失败: ${err && err.message ? err.message : err}`);
+      }
+    }
   };
 
   return { instance, ctx, dispose, grantedPermissions: granted };
