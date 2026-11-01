@@ -273,6 +273,22 @@ const buildAboutHtml = () => {
           使用本项目造成的一切后果由使用者自行承担。
         </div>
       </section>
+
+      <section class="aura-audit-panel">
+        <div class="aura-about-panel-head">
+          <p class="aura-about-panel-title">导入或导出配置</p>
+          <span class="aura-about-panel-hint">用于批量部署 / 迁移到同型号设备</span>
+        </div>
+        <div class="aura-about-license-text">
+          导出内容: 全部 Aura 设置、插件启用状态与权限、各插件的私有设置。文件包含访问密码的
+          哈希, 请妥善保管。导出文件为明文 (加密标志强制置 false, 导入后可在目标设备重新开启加密)。
+        </div>
+        <div class="aura-about-config-io">
+          <button id="auraConfigExportBtn" type="button" class="aura-audit-btn aura-about-btn-accent">导出配置</button>
+          <button id="auraConfigImportBtn" type="button" class="aura-audit-btn">导入配置</button>
+          <span id="auraConfigIoStatus" class="aura-about-config-io-status"></span>
+        </div>
+      </section>
     </div>
   `;
 };
@@ -307,6 +323,134 @@ const initAboutSubPage = () => {
         console.error("[HugoAura / About] Open external failed:", err)
       );
   });
+
+  // ---- 配置导入 / 导出 (批量部署与迁移) ----
+  const ioStatusEl = document.getElementById("auraConfigIoStatus");
+  const setIoStatus = (text, isError) => {
+    if (!ioStatusEl) return;
+    ioStatusEl.textContent = text;
+    ioStatusEl.style.color = isError
+      ? "var(--audit-danger)"
+      : "var(--audit-success)";
+  };
+
+  let pendingImport = null;
+
+  const performImport = async () => {
+    const importBtn2 = document.getElementById("auraConfigImportBtn");
+    const payload = pendingImport;
+    pendingImport = null;
+    if (!payload) return;
+    try {
+      if (importBtn2) importBtn2.disabled = true;
+      // 1) 插件私有设置先落盘 (未安装的插件由主进程自动跳过)
+      const applyRes = await global.ipcRenderer.invoke(
+        "$aura.config.applyPluginSettings",
+        { settingsMap: payload.pluginSettings || {} }
+      );
+      // 2) 原位替换渲染层配置: 走代理赋值触发事件与持久化;
+      //    当前存在而导入配置没有的键一并删除
+      const imported = payload.config;
+      const current = global.__HUGO_AURA_CONFIG__;
+      for (const key of Object.keys(current)) {
+        if (!(key in imported)) delete current[key];
+      }
+      for (const key of Object.keys(imported)) {
+        current[key] = imported[key];
+      }
+      // 3) 保存 + 提示重启
+      await global.__HUGO_AURA_UI_FUNCTIONS__.config.handleSaveConfig();
+      const appliedList =
+        applyRes && applyRes.data && applyRes.data.applied
+          ? applyRes.data.applied.join(", ")
+          : "";
+      setIoStatus(
+        `导入完成${appliedList ? ` (插件设置已写入: ${appliedList})` : ""}。建议重启管家以完全生效。`,
+        false
+      );
+      if (importBtn2) {
+        importBtn2.textContent = "导入配置";
+        delete importBtn2.dataset.confirm;
+      }
+    } catch (err) {
+      setIoStatus(`导入失败: ${String(err)}`, true);
+    } finally {
+      if (importBtn2) importBtn2.disabled = false;
+    }
+  };
+
+  const exportBtn = document.getElementById("auraConfigExportBtn");
+  if (exportBtn) {
+    exportBtn.addEventListener("click", async () => {
+      try {
+        exportBtn.disabled = true;
+        setIoStatus("正在生成导出文件...", false);
+        const clone = JSON.parse(
+          JSON.stringify(global.__HUGO_AURA_CONFIG__ || {})
+        );
+        // 加密标志强制置 false: 目标设备需重新开启加密以生成自己的
+        // DPAPI 凭据, 直接带入会因注册表口令缺失而无法解密
+        if (clone.auraSettings) clone.auraSettings.encryptConfig = false;
+        const payload = {
+          kind: "HugoAura-Config-Export",
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          auraVersion: (global.__HUGO_AURA__ && global.__HUGO_AURA__.version) || "",
+          config: clone,
+        };
+        const res = await global.ipcRenderer.invoke(
+          "$aura.config.exportToFile",
+          { dataJson: JSON.stringify(payload) }
+        );
+        if (res && res.success) {
+          setIoStatus(
+            `已导出: ${res.data.path} (插件设置 ${res.data.pluginSettingsCount} 个)`,
+            false
+          );
+        } else if (res && res.error !== "CANCELED") {
+          setIoStatus(`导出失败: ${(res && res.error) || "未知错误"}`, true);
+        } else {
+          setIoStatus("", false);
+        }
+      } catch (err) {
+        setIoStatus(`导出失败: ${String(err)}`, true);
+      } finally {
+        exportBtn.disabled = false;
+      }
+    });
+  }
+
+  const importBtn = document.getElementById("auraConfigImportBtn");
+  if (importBtn) {
+    importBtn.addEventListener("click", async () => {
+      // 两段式确认: 第一次选择文件并展示摘要, 第二次确认应用
+      if (importBtn.dataset.confirm === "true") {
+        await performImport();
+        return;
+      }
+      try {
+        importBtn.disabled = true;
+        const res = await global.ipcRenderer.invoke("$aura.config.importFromFile");
+        if (!res || !res.success) {
+          if (res && res.error !== "CANCELED") {
+            setIoStatus(`导入失败: ${(res && res.error) || "未知错误"}`, true);
+          }
+          return;
+        }
+        pendingImport = res.data.payload;
+        setIoStatus(
+          `将导入: ${res.data.path} (导出来自 Aura ${pendingImport.auraVersion || "?"})。导入将覆盖当前全部设置并关闭加密模式, 建议先导出当前配置作为备份。`,
+          true
+        );
+        importBtn.textContent = "确认导入";
+        importBtn.dataset.confirm = "true";
+      } catch (err) {
+        setIoStatus(`导入失败: ${String(err)}`, true);
+      } finally {
+        importBtn.disabled = false;
+      }
+    });
+  }
 
   const statusEl = document.getElementById("auraUpdateStatus");
   const checkBtn = document.getElementById("auraUpdateCheckBtn");
