@@ -242,9 +242,31 @@ const buildSandboxDeps = (manifest, pluginDir) => {
 };
 
 /**
+ * 读取用户在插件详情弹窗里的权限开关 (auraSettings.plugins.permissions[id])。
+ * 未配置的权限默认视为开启; 显式 false 即关闭。
+ * @param {string} id
+ */
+const getUserPermissionState = (id) => {
+  try {
+    const config = global.__HUGO_AURA_CONFIG_MGR__
+      ? global.__HUGO_AURA_CONFIG_MGR__.loadConfig()
+      : null;
+    const perms =
+      config &&
+      config.auraSettings &&
+      config.auraSettings.plugins &&
+      config.auraSettings.plugins.permissions;
+    return (perms && perms[id]) || {};
+  } catch (err) {
+    return {};
+  }
+};
+
+/**
  * 加载一个 main 插件 (调用方负责 try/catch)。
  * main 插件在 vm 能力沙箱中运行: 无 require/fs/central, 仅暴露
  * manifest/config/logger/timers + 声明的 storage/events/network 能力。
+ * 授予集 = manifest 声明 ∩ 用户权限开关 (详情弹窗, 显式 false 即关闭)。
  * @param {string} pluginDir
  * @param {any} manifest
  */
@@ -252,7 +274,11 @@ const loadMainPlugin = (pluginDir, manifest) => {
   const mainPath = path.join(pluginDir, manifest.main);
   const source = fs.readFileSync(mainPath, "utf8");
   const deps = buildSandboxDeps(manifest, pluginDir);
-  const granted = resolveGrantedPermissions(manifest);
+  const userPermState = getUserPermissionState(manifest.id);
+  const granted = resolveGrantedPermissions(manifest).filter((key) => {
+    const userSetting = userPermState[key];
+    return userSetting === undefined ? true : userSetting !== false;
+  });
   const sandboxRun = runMainPlugin({
     source,
     manifest,

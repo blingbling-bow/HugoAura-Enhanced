@@ -9,10 +9,15 @@ const path = require("node:path");
 const pluginManager = require("../src/aura/init/main/pluginManager.js");
 
 /** 建临时 auraDir (global.__HUGO_AURA__.auraDir) */
-const makeEnv = (t, { enabledMap = {} } = {}) => {
+const makeEnv = (t, { enabledMap = {}, permissionsMap = {} } = {}) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aura-plugins-test-"));
   const config = {
-    auraSettings: { plugins: { enabled: { ...enabledMap } } },
+    auraSettings: {
+      plugins: {
+        enabled: { ...enabledMap },
+        permissions: { ...permissionsMap },
+      },
+    },
   };
 
   global.__HUGO_AURA__ = global.__HUGO_AURA__ || {};
@@ -209,6 +214,56 @@ test("enablePlugin: ui 类型只校验不加载主进程实例", (t) => {
     env.makePlugin("demo.ui", { type: "ui" });
     pluginManager.enablePlugin("demo.ui");
     assert.strictEqual(pluginManager.isMainPluginLoaded("demo.ui"), false);
+  } finally {
+    env.cleanup();
+  }
+});
+
+test("权限运行时强制: 用户关闭 storage 后, 未探测的插件加载失败 / 探测型插件正常", (t) => {
+  // 用户在详情弹窗关闭了 demo.a 的 storage 权限
+  const env = makeEnv(t, {
+    enabledMap: { "demo.a": true, "demo.probe": true },
+    permissionsMap: { "demo.a": { storage: false }, "demo.probe": { storage: false } },
+  });
+  try {
+    // demo.a: onLoad 无条件触碰 ctx.settings → 能力不存在 → 加载失败
+    env.makePlugin("demo.a");
+    // demo.probe: 先探测 typeof ctx.settings 再使用 → 优雅降级, 正常加载
+    const probeDir = path.join(env.tmpDir, "plugins", "demo.probe");
+    fs.mkdirSync(probeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(probeDir, "manifest.json"),
+      JSON.stringify({
+        id: "demo.probe",
+        name: "probe",
+        version: "1.0.0",
+        author: "tester",
+        description: "t",
+        type: "main",
+        main: "main.js",
+        permissions: [{ key: "storage", label: "存储" }],
+      })
+    );
+    fs.writeFileSync(
+      path.join(probeDir, "main.js"),
+      [
+        "module.exports = {",
+        "  onLoad: function (ctx) {",
+        "    if (typeof ctx.settings !== 'undefined') ctx.settings.set({ probed: true });",
+        "  },",
+        "};",
+      ].join("\n")
+    );
+
+    const res = pluginManager.loadPlugins();
+    assert.strictEqual(res.installed, 2);
+    assert.strictEqual(res.loaded, 1, "触碰被关闭能力的插件应加载失败");
+    assert.strictEqual(pluginManager.isMainPluginLoaded("demo.a"), false);
+    assert.strictEqual(
+      pluginManager.isMainPluginLoaded("demo.probe"),
+      true,
+      "探测型插件应正常加载"
+    );
   } finally {
     env.cleanup();
   }

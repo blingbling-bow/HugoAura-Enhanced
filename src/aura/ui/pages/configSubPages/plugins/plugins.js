@@ -206,7 +206,9 @@
             <span class="aura-market-perm-icon">${icon}</span>
             <div class="aura-market-perm-info">
               <p class="aura-market-perm-name">${escapeMarketHtml(perm.label)}</p>
-              <p class="aura-market-perm-desc">${escapeMarketHtml(perm.description || "允许插件使用该能力")}</p>
+              <p class="aura-market-perm-desc">${escapeMarketHtml(
+                perm.description || "允许插件使用该能力"
+              )}（修改后需停用并重新启用插件生效）</p>
             </div>
             <div class="form-check form-switch">
               <input
