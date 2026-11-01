@@ -1,0 +1,21 @@
+{
+  "id": "com.aura.countdown",
+  "name": "倒计时组件",
+  "version": "1.0.0",
+  "author": "HugoAura",
+  "description": "屏幕悬浮倒计时面板: 3/5/10 分钟快捷预设, 点击开始/暂停, 时间到红色闪烁提醒。适合课堂练习、课间管理与考试计时。",
+  "type": "ui",
+  "main": "main.js",
+  "apiLevel": 1,
+  "homepage": "https://github.com/blingbling-bow/HugoAura-Enhanced",
+  "configUI": [
+    {
+      "key": "defaultMinutes",
+      "label": "默认时长 (分钟)",
+      "type": "input",
+      "placeholder": "5",
+      "description": "面板复位时使用的时长 (需重新注入页面生效)"
+    }
+  ],
+  "permissions": []
+}

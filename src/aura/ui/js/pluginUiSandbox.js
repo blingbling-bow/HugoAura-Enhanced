@@ -216,6 +216,7 @@ const runUiPlugin = (options) => {
       },
     },
     __manifestJson: JSON.stringify(manifest || {}),
+    __manifestId: String((manifest && manifest.id) || ""),
     __auraVersion: String(auraVersion || ""),
   };
 

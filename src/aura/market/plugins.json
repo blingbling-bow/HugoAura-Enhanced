@@ -24,6 +24,17 @@
       "homepage": "https://github.com/blingbling-bow/HugoAura-Enhanced",
       "downloadUrl": "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Enhanced@dev/src/aura/market/packages/aura-test-ui.zip",
       "sha256": "fbbc70ea3a493ee7c5624ca4409083f1543ed88fc9e998fdd3c7335d21d6c97a"
+    },
+    {
+      "id": "com.aura.countdown",
+      "name": "倒计时组件",
+      "version": "1.0.0",
+      "author": "HugoAura",
+      "description": "屏幕悬浮倒计时面板: 3/5/10 分钟快捷预设, 点击开始/暂停, 时间到红色闪烁提醒。适合课堂练习、课间管理与考试计时。",
+      "type": "ui",
+      "homepage": "https://github.com/blingbling-bow/HugoAura-Enhanced",
+      "downloadUrl": "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Enhanced@feature/plugins/src/aura/market/packages/com.aura.countdown.zip",
+      "sha256": "783b503c23c2cfed5aae9adaee4bf3d84725d0cc00011a5dbf4266c74fe34ef9"
     }
   ]
 }

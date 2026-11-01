@@ -77,10 +77,21 @@ var __prelude = (function () {
   };
 
   // ---- IPC 白名单 ($aura.plugin.* 前缀), JSON 跨界 + 本 realm Promise ----
+  // 身份绑定: getConfig / saveConfig 强制只作用于自身 id, 防止跨插件
+  // 读写其他插件的私有设置
+  var ownId = String(__manifestId || "");
   ctx.ipc = {
     invoke: function (channel, payload) {
+      var p = payload === undefined ? null : payload;
+      if (
+        (channel === "$aura.plugin.getConfig" ||
+          channel === "$aura.plugin.saveConfig") &&
+        p && typeof p === "object"
+      ) {
+        p.id = ownId;
+      }
       return new Promise(function (resolve) {
-        host.invokeAsync("ipcInvoke", [String(channel), JSON.stringify(payload === undefined ? null : payload)]).then(
+        host.invokeAsync("ipcInvoke", [String(channel), JSON.stringify(p)]).then(
           function (jsonStr) {
             try {
               resolve(JSON.parse(jsonStr));
@@ -96,6 +107,7 @@ var __prelude = (function () {
   // ---- 删除宿主入口 ----
   delete __host;
   delete __manifestJson;
+  delete __manifestId;
   delete __auraVersion;
 
   this.__ctx = ctx;
