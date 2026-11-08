@@ -1017,6 +1017,33 @@
       const modal = document.querySelector(".aura-market-modal");
       if (!modal) return;
 
+      // 风险确认勾选: 勾选后启用"确认安装"按钮 (点击与键盘切换都覆盖)
+      const ackEl = document.getElementById("auraPluginRiskAck");
+      if (
+        ackEl &&
+        modal.contains(ackEl) &&
+        event.target &&
+        (event.target === ackEl ||
+          (typeof event.target.closest === "function" &&
+            event.target.closest('label[for="auraPluginRiskAck"]')))
+      ) {
+        const confirmBtn = modal.querySelector(
+          '[data-modal-action="confirm-install"]'
+        );
+        if (confirmBtn) confirmBtn.disabled = !ackEl.checked;
+        if (ackEl.checked) {
+          const row = ackEl.closest(".aura-market-perm-ack");
+          if (row) row.classList.remove("is-alert");
+          const label = row && row.querySelector("label");
+          if (label) {
+            label.textContent = "我已知悉上述权限与风险, 同意安装";
+            label.style.color = "";
+            label.style.fontWeight = "";
+          }
+        }
+        return;
+      }
+
       // 权限开关 (details 弹窗)
       const permSwitch =
         event.target && typeof event.target.closest === "function"
@@ -1044,10 +1071,19 @@
       } else if (action === "start") {
         startUrlInstall();
       } else if (action === "confirm-install") {
-        // 风险确认勾选保护: 未勾选时确认按钮本已禁用, 此处再兜底一层
+        // 风险确认勾选保护: 未勾选时给出醒目提示 (而非静默失败)
         const ackEl = document.getElementById("auraPluginRiskAck");
         if (ackEl && !ackEl.checked) {
-          console.warn("[HugoAura / Market] 请先勾选风险确认后再安装");
+          const row = ackEl.closest(".aura-market-perm-ack");
+          if (row) {
+            row.classList.add("is-alert");
+            const label = row.querySelector("label");
+            if (label) {
+              label.textContent = "请先勾选下方确认, 再安装 ←";
+              label.style.color = "var(--audit-danger)";
+              label.style.fontWeight = "bold";
+            }
+          }
           return;
         }
         confirmInstall();
@@ -1060,6 +1096,15 @@
         if (item) savePluginConfig(item.id);
         closeModal();
       }
+    });
+
+    // 风险确认勾选的键盘切换 (空格) 覆盖
+    document.addEventListener("change", (event) => {
+      if (!event.target || event.target.id !== "auraPluginRiskAck") return;
+      const modal = document.querySelector(".aura-market-modal");
+      const confirmBtn =
+        modal && modal.querySelector('[data-modal-action="confirm-install"]');
+      if (confirmBtn) confirmBtn.disabled = !event.target.checked;
     });
 
     // Esc 关闭弹窗
