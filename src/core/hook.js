@@ -126,6 +126,24 @@ const launcher = ({ central, windowName, config }) => {
   initLogger(windowName);
 
   console.log("[HugoAura / Loaded] Aura is loaded!");
+
+  // >>> 事件循环阻塞记录仪 (界面卡死诊断) <<<
+  // 每秒校准一次; 主进程事件循环一旦被同步任务卡住 (磁盘 I/O / 重型加密 /
+  // 死循环), 这里会量出实际阻塞时长并写进日志 —— 下次 "界面卡死" 的报告
+  // 可以直接拿日志里的 Diag 行对齐卡死时间点与时长, 不用再猜原因。
+  let diagLastTick = Date.now();
+  const DIAG_TICK_MS = 1000;
+  const diagTimer = setInterval(() => {
+    const now = Date.now();
+    const lag = now - diagLastTick - DIAG_TICK_MS;
+    diagLastTick = now;
+    if (lag >= 1000) {
+      console.warn(
+        `[HugoAura / Diag] 主进程事件循环阻塞约 ${lag}ms (窗口: ${windowName}) — 界面若在此刻卡死, 卡死时长与本条对应`
+      );
+    }
+  }, DIAG_TICK_MS);
+  if (typeof diagTimer.unref === "function") diagTimer.unref();
   console.debug(`[HugoAura / Debug] curWindowName: ${windowName}`);
 
   // >>> Init EventBus <<< //
