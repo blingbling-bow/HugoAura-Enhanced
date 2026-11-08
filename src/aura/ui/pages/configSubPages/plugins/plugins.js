@@ -164,13 +164,14 @@
       </div>
     </div>`;
 
-  /** 权限 key → 展示信息 (manifest 未提供 label/description 时的兜底) */
+  /** 权限 key → 展示信息 (manifest 未提供 label/description 时的兜底)。
+   *  面向普通用户: 说清楚"能做什么", 不出现技术术语。 */
   const PERMISSION_INFO = {
-    storage: { label: "私有存储", desc: "读写插件自己的持久化设置 (≤256KB)" },
-    events: { label: "事件总线", desc: "订阅/发布插件自己命名空间内的事件" },
-    network: { label: "联网请求", desc: "经安全校验的 HTTP GET (禁内网/localhost, ≤1MB/10s)" },
-    notify: { label: "全局通知", desc: "弹出 Aura 置顶提醒小窗" },
-    shortcuts: { label: "全局快捷键", desc: "注册系统级快捷键 (≤8 个, 卸载自动注销)" },
+    storage: { label: "记住自己的设置", desc: "插件可以记住自己的开关状态与选择" },
+    events: { label: "接收事件通知", desc: "当自己的设置被修改时收到通知" },
+    network: { label: "访问互联网", desc: "下载网页内容（已限制范围并做安全校验）" },
+    notify: { label: "弹出屏幕提醒", desc: "在屏幕角落显示提醒" },
+    shortcuts: { label: "注册键盘快捷键", desc: "可以用组合键触发插件功能" },
   };
 
   /** 安装确认弹窗的权限清单 (main 按声明, ui 为类型内建能力) */
@@ -180,13 +181,15 @@
         <div class="aura-market-perm-row">
           <span class="aura-market-perm-icon">${ICONS.checkCircle}</span>
           <div class="aura-market-perm-info">
-            <p class="aura-market-perm-name">页面悬浮元素 (声明式 DOM 桥)</p>
+            <p class="aura-market-perm-name">在页面上显示悬浮小组件</p>
+            <p class="aura-market-perm-desc">例如倒计时、状态徽章；只能显示，不能读取页面内容</p>
           </div>
         </div>
         <div class="aura-market-perm-row">
           <span class="aura-market-perm-icon">${ICONS.checkCircle}</span>
           <div class="aura-market-perm-info">
-            <p class="aura-market-perm-name">$aura.plugin.* 白名单 IPC</p>
+            <p class="aura-market-perm-name">读取插件列表和自己的配置</p>
+            <p class="aura-market-perm-desc">无法访问系统设置、文件或其他数据</p>
           </div>
         </div>`;
     }
