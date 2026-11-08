@@ -76,11 +76,21 @@ const hasVisibleDomAlertWindow = (electron) => {
  * 标题/时长逻辑与渲染层 (ui/js/global.js 的 showAlert) 保持同源:
  *   锁屏 5 秒 (lockScreenInterceptor.NOTIFY_DELAY_MS, 延迟放行, 提示随之收起);
  *   关机为立即阻止, 没有延迟, 提示停留 10 秒。改动时两处需同步。
- * @param {{action?: string, source?: string, ts?: string, _logType?: string, bootGuard?: boolean}} record
+ * 插件通知 (notify 权限): record.title 显式提供时优先使用,
+ *   durationMs 可自定义 (钳制 3s-60s), 来源行由调用方填充。
+ * @param {{action?: string, source?: string, ts?: string, _logType?: string, bootGuard?: boolean, title?: string, durationMs?: number}} record
  *        与渲染层弹窗同源的拦截记录 (lockScreen / powerOff 拦截器构造)
  * @returns {{title: string, type: "blocked" | "notify", durationMs: number}}
  */
 const getAlertContent = (record) => {
+  // 插件通知: 显式 title 优先 (防止插件伪造拦截文案)
+  if (typeof record.title === "string" && record.title.trim()) {
+    return {
+      title: record.title.trim().slice(0, 120),
+      type: "notify",
+      durationMs: Math.min(Math.max(Number(record.durationMs) || 5000, 3000), 60000),
+    };
+  }
   const isLock = record._logType === "lockScreen";
   const blocked = record.action === "blocked";
   // bootGuard: 开机窗口期拦截走的是本地 "下课锁屏" 流程, 措辞区分于远程指令
@@ -162,9 +172,9 @@ const showAlertWindow = (electron, record) => {
       // "预编码一次 + 页面解两次" 都能得到原文 (修复提醒内容显示成 %E5.. 乱码)
       title: encodeURIComponent(title),
       meta: encodeURIComponent(
-        `来源: ${record.source || "unknown"} · ${
-          record.ts ? new Date(record.ts).toLocaleTimeString("zh-CN") : "-"
-        }`
+        `${record.body ? record.body + " · " : ""}来源: ${
+          record.source || "unknown"
+        } · ${record.ts ? new Date(record.ts).toLocaleTimeString("zh-CN") : "-"}`
       ),
       type,
       duration: String(durationMs),

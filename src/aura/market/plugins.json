@@ -1,0 +1,40 @@
+{
+  "_readme": "HugoAura 插件市场清单 (随 aura 包内置, 同时作为仓库在线清单)。运行时市场源顺序: jsDelivr (@dev 分支) → raw.githubusercontent → 包内本地文件 (离线兜底)。本文件位于 src/aura/market/, 打包后位于 <aura 安装目录>/market/; 新增插件时把 zip 放入 packages/ 并在此登记。downloadUrl 在线源必须是可直连的 http(s) 直链, homepage 必须是 https; 本地兜底模式下安装走包内 packages/ 目录。version 与包内 manifest.json 保持一致, 覆盖安装时低于已装版本会被拒绝。",
+  "version": 1,
+  "updatedAt": "2026-10-18",
+  "items": [
+    {
+      "id": "com.aura.test.main",
+      "name": "Aura 测试插件 (主进程)",
+      "version": "1.2.0",
+      "author": "HugoAura",
+      "description": "验证主进程插件沙箱: 无 require/fs/central, 配置只读快照 / 私有设置 / 自命名空间事件 / 心跳与卸载回收。",
+      "type": "main",
+      "homepage": "https://github.com/blingbling-bow/HugoAura-Enhanced",
+      "downloadUrl": "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Market@main/packages/com.aura.test.main.zip",
+      "sha256": "cec5bd1257cb5c91b78a82270499a81263d9f2d1d1d95353178b4e0e9b721f25"
+    },
+    {
+      "id": "com.aura.test.ui",
+      "name": "Aura 测试插件 (界面)",
+      "version": "1.1.0",
+      "author": "HugoAura",
+      "description": "验证 UI 插件沙箱: 声明式 DOM 桥 (真实节点不进沙箱) + $aura.plugin.* IPC 白名单。",
+      "type": "ui",
+      "homepage": "https://github.com/blingbling-bow/HugoAura-Enhanced",
+      "downloadUrl": "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Market@main/packages/com.aura.test.ui.zip",
+      "sha256": "fbbc70ea3a493ee7c5624ca4409083f1543ed88fc9e998fdd3c7335d21d6c97a"
+    },
+    {
+      "id": "com.aura.countdown",
+      "name": "倒计时组件",
+      "version": "1.0.0",
+      "author": "HugoAura",
+      "description": "屏幕悬浮倒计时面板: 3/5/10 分钟快捷预设, 点击开始/暂停, 时间到红色闪烁提醒。适合课堂练习、课间管理与考试计时。",
+      "type": "ui",
+      "homepage": "https://github.com/blingbling-bow/HugoAura-Enhanced",
+      "downloadUrl": "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Market@main/packages/com.aura.countdown.zip",
+      "sha256": "783b503c23c2cfed5aae9adaee4bf3d84725d0cc00011a5dbf4266c74fe34ef9"
+    }
+  ]
+}

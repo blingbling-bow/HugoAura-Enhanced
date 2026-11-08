@@ -172,6 +172,16 @@ const launcher = ({ central, windowName, config }) => {
     global.__HUGO_AURA__.ipcInit = true;
   }
 
+  // >>> Init Plugins (main 类型插件运行时, guarded) <<< //
+  if (!global.__HUGO_AURA__.pluginsLoaded) {
+    try {
+      require("../aura/init/main/pluginManager").loadPlugins();
+      global.__HUGO_AURA__.pluginsLoaded = true;
+    } catch (err) {
+      console.error("[HugoAura / Plugins] Failed to initialize plugin runtime:", err);
+    }
+  }
+
   // >>> Init Aura Hooks (guarded: 仅安装一次, 防止多窗口重入) <<< //
   if (!global.__HUGO_AURA__.auraHooksInstalled) {
     // 逐个隔离安装: 任一钩子(含模块加载)抛错都只跳过它自己,
