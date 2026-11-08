@@ -701,10 +701,19 @@
         { id }
       );
       if (!res || !res.success) {
-        console.error("[HugoAura / Market] Toggle failed:", res && res.error);
+        // 启用/停用失败必须可见 (典型: 旧版插件触发沙箱违规)
+        closeModal();
+        openModal(
+          errorModalHtml(
+            `${enabled ? "启用" : "停用"}插件失败: ${
+              (res && res.error) || "未知错误"
+            }`
+          )
+        );
       }
     } catch (err) {
-      console.error("[HugoAura / Market] Toggle failed:", err);
+      closeModal();
+      openModal(errorModalHtml(`启用/停用插件失败: ${String(err)}`));
     } finally {
       state.busy = false;
       await refreshList();

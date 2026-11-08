@@ -318,7 +318,21 @@ const loadMainPlugin = (pluginDir, manifest) => {
   });
   const instance = sandboxRun.instance;
   if (instance && typeof instance.onLoad === "function") {
-    instance.onLoad(sandboxRun.ctx);
+    try {
+      instance.onLoad(sandboxRun.ctx);
+    } catch (err) {
+      const msg = String(err && err.message ? err.message : err);
+      // 沙箱违规友好化: 旧版插件 (沙箱前契约) 使用 require/process 等时给出
+      // 明确的升级指引, 而不是裸的 ReferenceError
+      const violation = msg.match(/(\w+) is not defined/);
+      if (violation && ["require", "process", "Buffer", "global"].includes(violation[1])) {
+        throw new Error(
+          `SANDBOX_VIOLATION: 插件使用了沙箱不允许的 API (${violation[1]})。` +
+            `通常是旧版插件 —— 请在插件市场更新到兼容版本, 或卸载后安装新版。`
+        );
+      }
+      throw err;
+    }
   }
   loadedMainPlugins.set(manifest.id, {
     manifest,
