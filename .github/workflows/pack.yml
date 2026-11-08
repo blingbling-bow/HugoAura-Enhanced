@@ -1,10 +1,10 @@
 name: Pack source code & Create CI/CD Release
 
 on:
-  # 任意分支每次 push 都触发一次自动构建 (tag 推送由 release.yml 处理)
+  # 仅 dev 主分支推送触发自动构建 (其他分支不构建; tag 推送由 release.yml 处理)
   push:
     branches:
-      - "**"
+      - dev
   workflow_dispatch:
 
 permissions:
