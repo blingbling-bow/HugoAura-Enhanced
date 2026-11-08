@@ -117,14 +117,8 @@
           <button
             type="button"
             class="aura-audit-btn aura-market-btn-more"
-            data-bs-toggle="dropdown"
-            aria-expanded="false"
+            data-action="menu"
           >··· 更多</button>
-          <ul class="dropdown-menu aura-market-card-menu">
-            <li><a class="dropdown-item" data-action="details">查看详情</a></li>
-            <li><a class="dropdown-item" data-action="openDir">打开插件目录</a></li>
-            <li><a class="dropdown-item" data-action="remove">卸载插件</a></li>
-          </ul>
         </div>
       </div>`;
   };
@@ -901,6 +895,35 @@
     }
   };
 
+  /** 卡片"更多"浮出菜单: 挂 body 层 (不依赖 Bootstrap 下拉, 不受容器裁剪影响) */
+  const closeCardMenu = () => {
+    const existing = document.querySelector(".aura-market-card-menu-pop");
+    if (existing) existing.remove();
+  };
+  const openCardMenu = (btn, item) => {
+    closeCardMenu();
+    const rect = btn.getBoundingClientRect();
+    const menu = document.createElement("div");
+    menu.className = "aura-market-card-menu-pop";
+    menu.dataset.pluginId = item.id;
+    menu.innerHTML = `
+      <div class="aura-market-card-menu-item" data-menu-action="details">查看详情</div>
+      <div class="aura-market-card-menu-item" data-menu-action="openDir">打开插件目录</div>
+      <div class="aura-market-card-menu-item is-danger" data-menu-action="remove">卸载插件</div>`;
+    menu.style.left = Math.max(8, rect.right - 150) + "px";
+    menu.style.top = rect.bottom + 6 + "px";
+    document.body.appendChild(menu);
+    setTimeout(() => {
+      const onDocClick = (event) => {
+        if (!menu.contains(event.target)) {
+          closeCardMenu();
+          document.removeEventListener("click", onDocClick, true);
+        }
+      };
+      document.addEventListener("click", onDocClick, true);
+    }, 0);
+  };
+
   // >>> 事件绑定 <<<
 
   const bindEvents = () => {
@@ -969,6 +992,8 @@
           togglePlugin(item.id, !item.enabled);
         } else if (action === "config") {
           openConfig(item);
+        } else if (action === "menu") {
+          openCardMenu(actionEl, item);
         } else if (action === "details") {
           openDetails(item);
         } else if (action === "openDir") {
@@ -1014,6 +1039,29 @@
 
     // 弹窗内交互 (统一委托): 关闭/开始下载/确认安装/保存配置/卸载/权限开关
     document.addEventListener("click", (event) => {
+      // 卡片"更多"菜单项 (body 层浮出菜单, 不依赖 Bootstrap 下拉)
+      const menuItem =
+        event.target && typeof event.target.closest === "function"
+          ? event.target.closest(".aura-market-card-menu-item")
+          : null;
+      if (menuItem) {
+        const pop = menuItem.closest(".aura-market-card-menu-pop");
+        const menuId = pop ? pop.dataset.pluginId : "";
+        const menuAction = menuItem.getAttribute("data-menu-action");
+        const item = findItem(menuId);
+        closeCardMenu();
+        if (!item) return;
+        if (menuAction === "details") {
+          openDetails(item);
+        } else if (menuAction === "openDir") {
+          global.ipcRenderer.invoke(`${IPC_BASE}.openDir`).catch(() => {});
+        } else if (menuAction === "remove") {
+          closeModal();
+          openModal(removeModalHtml(item));
+        }
+        return;
+      }
+
       const modal = document.querySelector(".aura-market-modal");
       if (!modal) return;
 

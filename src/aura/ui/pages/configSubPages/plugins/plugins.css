@@ -1240,3 +1240,37 @@
   margin: 0;
   cursor: pointer;
 }
+
+/* 卡片"更多"浮出菜单 (body 层, 自绘, 不依赖 Bootstrap 下拉) */
+.aura-market-card-menu-pop {
+  position: fixed;
+  z-index: 2147483646;
+  min-width: 148px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  padding: 0.3rem;
+}
+
+.aura-market-card-menu-item {
+  padding: 0.45rem 0.7rem;
+  border-radius: 7px;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.8);
+  cursor: pointer;
+  user-select: none;
+}
+
+.aura-market-card-menu-item:hover {
+  background: rgba(33, 143, 255, 0.1);
+  color: var(--audit-primary);
+}
+
+.aura-market-card-menu-item.is-danger {
+  color: var(--audit-danger);
+}
+
+.aura-market-card-menu-item.is-danger:hover {
+  background: rgba(220, 38, 38, 0.1);
+}
