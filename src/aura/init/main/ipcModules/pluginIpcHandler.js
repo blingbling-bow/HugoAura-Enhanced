@@ -40,6 +40,7 @@ const STAGE_TTL_MS = 30 * 60 * 1000;
 /** 市场清单数据源 (按顺序尝试): 独立市场仓库 (jsDelivr 对国内友好) → raw 兜底 → 包内本地文件 (离线可用) */
 const MARKET_SOURCES = [
   "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Market@main/plugins.json",
+  "https://fastly.jsdelivr.net/gh/blingbling-bow/HugoAura-Market@main/plugins.json",
   "https://raw.githubusercontent.com/blingbling-bow/HugoAura-Market/main/plugins.json",
 ];
 /** 本地源标识 (非 URL, fetchMarketManifest 按此走文件读取) */
@@ -176,8 +177,7 @@ const downloadWithRedirects = (url, destPath, onProgress) =>
       if (!safety.ok) {
         reject(new Error(`UNSAFE_URL: ${safety.reason}`));
         return;
-      }
-      const transport = safety.url.protocol === "https:" ? nodeHttps : nodeHttp;
+      }      const transport = safety.url.protocol === "https:" ? nodeHttps : nodeHttp;
       const req = transport.get(safety.url, (res) => {
         const status = res.statusCode || 0;
         if ([301, 302, 303, 307, 308].includes(status)) {
@@ -216,11 +216,37 @@ const downloadWithRedirects = (url, destPath, onProgress) =>
         });
         stream.on("error", (err) => reject(err));
       });
+      // 空闲超时: 连接挂住 (对端不响应/被墙 RESET 丢包) 时中止本次尝试,
+      // 让多源回退切到下一个源 —— 否则进度条会永远停住
+      req.setTimeout(30000, () => {
+        req.destroy(new Error("DOWNLOAD_TIMEOUT"));
+      });
       req.on("error", (err) => reject(err));
     };
 
     doRequest(url, 0);
   });
+
+/**
+ * 由主下载地址推导候选源列表 (下载失败时按序回退)。
+ * jsDelivr 在国内时好时坏, 因此同源内容补充 fastly 镜像与 raw 兜底。
+ * @param {string} url
+ * @returns {string[]}
+ */
+const deriveDownloadCandidates = (url) => {
+  const candidates = [url];
+  const m = url.match(
+    /^https:\/\/cdn\.jsdelivr\.net\/gh\/([^/@]+)\/([^/@]+)@([^/]+)\/(.+)$/
+  );
+  if (m) {
+    const [, user, repo, ref, filePath] = m;
+    candidates.push(
+      `https://fastly.jsdelivr.net/gh/${user}/${repo}@${ref}/${filePath}`,
+      `https://raw.githubusercontent.com/${user}/${repo}/${ref}/${filePath}`
+    );
+  }
+  return candidates;
+};
 
 // ---- 市场清单 ----
 // 解析/校验/安装状态标注在 utils/marketManifest.js (纯函数, 便于单测)
@@ -578,16 +604,66 @@ const applyPluginIpcHandler = (ipcMain) => {
         zipPath = path.join(tmpDir, "plugin.zip");
         report({ stage: "download", progress: 0, curBytes: 0, totalBytes: 0 });
 
-        await downloadWithRedirects(url, zipPath, (p) =>
-          report({
-            stage: "download",
-            progress: p.totalBytes
-              ? Math.round((p.curBytes / p.totalBytes) * 100)
-              : 0,
-            curBytes: p.curBytes,
-            totalBytes: p.totalBytes,
-          })
-        );
+        // 多源回退下载: jsDelivr → fastly 镜像 → raw → 包内本地兜底
+        // (国内网络对 jsDelivr 时好时坏, 单源会把进度条永远卡住)
+        const candidates = deriveDownloadCandidates(url);
+        let lastError = null;
+        let downloaded = false;
+        for (let i = 0; i < candidates.length; i++) {
+          try {
+            report({
+              stage: "download",
+              progress: 0,
+              curBytes: 0,
+              totalBytes: 0,
+            });
+            await downloadWithRedirects(
+              candidates[i],
+              zipPath,
+              (p) =>
+                report({
+                  stage: "download",
+                  progress: p.totalBytes
+                    ? Math.round((p.curBytes / p.totalBytes) * 100)
+                    : 0,
+                  curBytes: p.curBytes,
+                  totalBytes: p.totalBytes,
+                })
+            );
+            downloaded = true;
+            break;
+          } catch (err) {
+            lastError = err;
+            console.warn(
+              `[HugoAura / Plugin] Download source failed (${candidates[i]}): ${
+                err && err.message ? err.message : err
+              }`
+            );
+          }
+        }
+
+        // 末级兜底: 包内自带同名插件包 (官方插件离线亦可用)
+        if (!downloaded) {
+          const basename = decodeURIComponent(
+            String(url).split("/").pop() || ""
+          );
+          const localPkg = basename
+            ? path.join(marketPackagesDir(), basename)
+            : "";
+          if (
+            basename &&
+            path.dirname(path.resolve(localPkg)) ===
+              path.resolve(marketPackagesDir()) &&
+            fs.existsSync(localPkg)
+          ) {
+            fs.copyFileSync(localPkg, zipPath);
+            console.log(
+              `[HugoAura / Plugin] All sources failed, using bundled package: ${basename}`
+            );
+          } else {
+            throw lastError || new Error("DOWNLOAD_FAILED");
+          }
+        }
 
         // 清单声明了 sha256 时做完整性校验 (CDN 缓存污染 / 下载截断防护)
         verifyFileSha256(zipPath, expectedSha256);
@@ -774,6 +850,7 @@ const applyPluginIpcHandler = (ipcMain) => {
 module.exports = {
   applyPluginIpcHandler,
   verifyFileSha256,
+  deriveDownloadCandidates,
   // 测试导出: 暂存清理与暂存表 (锁定 "只删暂存目录本身" 的回归语义)
   pruneStaleStages,
   stagedInstalls,

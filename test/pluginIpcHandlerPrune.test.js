@@ -71,3 +71,19 @@ test("pruneStaleStages: 只删过期暂存目录本身, 不碰父目录与其他
     fs.rmSync(parent, { recursive: true, force: true });
   }
 });
+
+test("deriveDownloadCandidates: jsDelivr 派生 fastly 镜像与 raw 兜底", () => {
+  const { deriveDownloadCandidates } = require("../src/aura/init/main/ipcModules/pluginIpcHandler");
+  const candidates = deriveDownloadCandidates(
+    "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Market@main/packages/com.aura.countdown.zip"
+  );
+  assert.deepEqual(candidates, [
+    "https://cdn.jsdelivr.net/gh/blingbling-bow/HugoAura-Market@main/packages/com.aura.countdown.zip",
+    "https://fastly.jsdelivr.net/gh/blingbling-bow/HugoAura-Market@main/packages/com.aura.countdown.zip",
+    "https://raw.githubusercontent.com/blingbling-bow/HugoAura-Market/main/packages/com.aura.countdown.zip",
+  ]);
+  // 非 jsDelivr 地址不派生
+  assert.deepEqual(deriveDownloadCandidates("https://example.com/a.zip"), [
+    "https://example.com/a.zip",
+  ]);
+});
