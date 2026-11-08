@@ -11,16 +11,25 @@ const auditWriter = require("../src/aura/mainProcess/hooks/auditWriter.js");
 
 const DAY = 24 * 3600 * 1000;
 
-/** 建立临时 aura 目录并把 global.__HUGO_AURA__ 指过去 */
+/** 建立临时 aura 目录并把 global.__HUGO_AURA__ 指过去 (支持异步用例) */
 const withTempAuraDir = (fn) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aura-writer-"));
   const prev = global.__HUGO_AURA__;
   global.__HUGO_AURA__ = { auraDir: dir };
-  try {
-    return fn(dir);
-  } finally {
+  const restore = () => {
     global.__HUGO_AURA__ = prev;
     fs.rmSync(dir, { recursive: true, force: true });
+  };
+  try {
+    const result = fn(dir);
+    if (result && typeof result.then === "function") {
+      return result.finally(restore);
+    }
+    restore();
+    return result;
+  } catch (err) {
+    restore();
+    throw err;
   }
 };
 
@@ -63,8 +72,8 @@ test("filterExpired: 保留未过期行, 删除过期行, 损坏行一律保留"
   assert.ok(kept.includes("{ 这不是 JSON"));
 });
 
-test("cleanupExpired: 按保留天数重写文件并返回删除数", () => {
-  withTempAuraDir((dir) => {
+test("cleanupExpired: 按保留天数重写文件并返回删除数", async () => {
+  await withTempAuraDir(async (dir) => {
     const file = "cleanup-a.log";
     writeLines(dir, file, [
       JSON.stringify({ ts: iso(-10 * DAY), n: "old" }),
@@ -72,7 +81,7 @@ test("cleanupExpired: 按保留天数重写文件并返回删除数", () => {
       JSON.stringify({ ts: iso(0), n: "now" }),
     ]);
 
-    const removed = auditWriter.cleanupExpired(file, 7);
+    const removed = await auditWriter.cleanupExpired(file, 7);
     assert.strictEqual(removed, 1);
 
     const left = readLines(dir, file).map((l) => JSON.parse(l).n);
@@ -80,8 +89,8 @@ test("cleanupExpired: 按保留天数重写文件并返回删除数", () => {
   });
 });
 
-test("cleanupExpired: 1 小时内重复调用被节流", () => {
-  withTempAuraDir((dir) => {
+test("cleanupExpired: 1 小时内重复调用被节流", async () => {
+  await withTempAuraDir(async (dir) => {
     const file = "cleanup-b.log";
     writeLines(dir, file, [
       JSON.stringify({ ts: iso(-30 * DAY), n: "old" }),
@@ -89,7 +98,7 @@ test("cleanupExpired: 1 小时内重复调用被节流", () => {
 
     // 第一次清理 (注入 now, 避免依赖真实时钟)
     const now = Date.now();
-    assert.strictEqual(auditWriter.cleanupExpired(file, 7, now), 1);
+    assert.strictEqual(await auditWriter.cleanupExpired(file, 7, now), 1);
     assert.strictEqual(readLines(dir, file).length, 0);
 
     // 再写一条过期记录, 节流窗口内不应再次清理
@@ -97,33 +106,33 @@ test("cleanupExpired: 1 小时内重复调用被节流", () => {
       logPath(dir, file),
       JSON.stringify({ ts: iso(-30 * DAY), n: "old2" }) + "\n"
     );
-    assert.strictEqual(auditWriter.cleanupExpired(file, 7, now + 1000), 0);
+    assert.strictEqual(await auditWriter.cleanupExpired(file, 7, now + 1000), 0);
     assert.strictEqual(readLines(dir, file).length, 1);
 
     // 超过节流窗口后恢复清理
     assert.strictEqual(
-      auditWriter.cleanupExpired(file, 7, now + auditWriter.CLEANUP_INTERVAL_MS + 1),
+      await auditWriter.cleanupExpired(file, 7, now + auditWriter.CLEANUP_INTERVAL_MS + 1),
       1
     );
     assert.strictEqual(readLines(dir, file).length, 0);
   });
 });
 
-test("cleanupExpired: retentionDays 非法时不动文件", () => {
-  withTempAuraDir((dir) => {
+test("cleanupExpired: retentionDays 非法时不动文件", async () => {
+  await withTempAuraDir(async (dir) => {
     const file = "cleanup-c.log";
     writeLines(dir, file, [JSON.stringify({ ts: iso(-100 * DAY) })]);
 
-    assert.strictEqual(auditWriter.cleanupExpired(file, 0), 0);
-    assert.strictEqual(auditWriter.cleanupExpired(file, -1), 0);
-    assert.strictEqual(auditWriter.cleanupExpired(file, NaN), 0);
-    assert.strictEqual(auditWriter.cleanupExpired(file, undefined), 0);
+    assert.strictEqual(await auditWriter.cleanupExpired(file, 0), 0);
+    assert.strictEqual(await auditWriter.cleanupExpired(file, -1), 0);
+    assert.strictEqual(await auditWriter.cleanupExpired(file, NaN), 0);
+    assert.strictEqual(await auditWriter.cleanupExpired(file, undefined), 0);
     assert.strictEqual(readLines(dir, file).length, 1);
   });
 });
 
-test("writeAudit: 传 retentionDays 时顺带清理过期记录", () => {
-  withTempAuraDir((dir) => {
+test("writeAudit: 传 retentionDays 时顺带清理过期记录", async () => {
+  await withTempAuraDir(async (dir) => {
     const file = "write-a.log";
     writeLines(dir, file, [JSON.stringify({ ts: iso(-30 * DAY), n: "old" })]);
 
@@ -131,28 +140,31 @@ test("writeAudit: 传 retentionDays 时顺带清理过期记录", () => {
       auditWriter.writeAudit(file, { ts: iso(0), n: "new" }, { retentionDays: 7 }),
       true
     );
+    await auditWriter.flushAudit(file);
 
     const left = readLines(dir, file).map((l) => JSON.parse(l).n);
     assert.deepStrictEqual(left, ["new"]);
   });
 });
 
-test("writeAudit: 不传 retentionDays 时只追加, 不清理", () => {
-  withTempAuraDir((dir) => {
+test("writeAudit: 不传 retentionDays 时只追加, 不清理", async () => {
+  await withTempAuraDir(async (dir) => {
     const file = "write-b.log";
     writeLines(dir, file, [JSON.stringify({ ts: iso(-30 * DAY), n: "old" })]);
 
     assert.strictEqual(auditWriter.writeAudit(file, { ts: iso(0), n: "new" }), true);
+    await auditWriter.flushAudit(file);
 
     const left = readLines(dir, file).map((l) => JSON.parse(l).n);
     assert.deepStrictEqual(left, ["old", "new"]);
   });
 });
 
-test("writeAudit: 首次写入 (文件不存在) 也能成功", () => {
-  withTempAuraDir((dir) => {
+test("writeAudit: 首次写入 (文件不存在) 也能成功", async () => {
+  await withTempAuraDir(async (dir) => {
     const file = "write-c.log";
     assert.strictEqual(auditWriter.writeAudit(file, { ts: iso(0), n: 1 }), true);
+    await auditWriter.flushAudit(file);
     assert.strictEqual(readLines(dir, file).length, 1);
   });
 });
