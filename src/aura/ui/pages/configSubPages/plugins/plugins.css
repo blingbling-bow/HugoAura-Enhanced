@@ -1224,10 +1224,7 @@
   display: flex;
   align-items: center;
   margin-top: 0.7rem;
-  padding: 0.5rem 0.6rem;
-  border: 1px solid rgba(15, 23, 42, 0.15);
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.04);
+  padding: 0 0.2rem;
 }
 
 .aura-market-perm-ack label {

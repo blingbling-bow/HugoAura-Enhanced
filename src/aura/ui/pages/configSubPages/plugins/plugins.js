@@ -178,21 +178,21 @@
     if (manifest.type === "ui") {
       return `
         <div class="aura-market-perm-row">
+          <span class="aura-market-perm-icon">${ICONS.checkCircle}</span>
           <div class="aura-market-perm-info">
-            <p class="aura-market-perm-name">声明式 DOM 桥</p>
-            <p class="aura-market-perm-desc">在页面上创建/修改悬浮元素 (标签/属性/事件白名单, 真实节点不进沙箱)</p>
+            <p class="aura-market-perm-name">页面悬浮元素 (声明式 DOM 桥)</p>
           </div>
         </div>
         <div class="aura-market-perm-row">
+          <span class="aura-market-perm-icon">${ICONS.checkCircle}</span>
           <div class="aura-market-perm-info">
             <p class="aura-market-perm-name">$aura.plugin.* 白名单 IPC</p>
-            <p class="aura-market-perm-desc">读取插件列表与自身配置 (跨插件读写已被沙箱禁止)</p>
           </div>
         </div>`;
     }
     const perms = Array.isArray(manifest.permissions) ? manifest.permissions : [];
     if (!perms.length) {
-      return '<p class="aura-market-perm-desc" style="padding:2px 0;">未申请任何可选能力 (仅配置快照 / 日志 / 定时器)。</p>';
+      return '<p class="aura-market-perm-desc" style="padding:2px 0;">该插件未申请额外权限。</p>';
     }
     return perms
       .map((p) => {
@@ -203,9 +203,9 @@
         const desc = p.description || info.desc || "";
         return `
           <div class="aura-market-perm-row">
+            <span class="aura-market-perm-icon">${ICONS.checkCircle}</span>
             <div class="aura-market-perm-info">
-              <p class="aura-market-perm-name">${escapeMarketHtml(info.label)}</p>
-              <p class="aura-market-perm-desc">${escapeMarketHtml(desc)}</p>
+              <p class="aura-market-perm-name">${escapeMarketHtml(info.label)}${desc ? ` — ${escapeMarketHtml(desc)}` : ""}</p>
             </div>
           </div>`;
       })
@@ -232,15 +232,8 @@
             <p class="aura-market-detail-label">插件将获得的权限</p>
             ${permRowsHtml(manifest)}
           </div>
-          <p>插件在 vm 能力沙箱中运行 (无 require / fs / process)，但沙箱是强化而非硬边界。
-             勾选确认即表示你已了解上述权限与插件代码的潜在风险。</p>
           <div class="aura-market-perm-ack">
-            <input
-              class="form-check-input"
-              type="checkbox"
-              role="switch"
-              id="auraPluginRiskAck"
-            />
+            <input class="form-check-input" type="checkbox" id="auraPluginRiskAck" />
             <label for="auraPluginRiskAck">我已知悉上述权限与风险, 同意安装</label>
           </div>
         </div>
@@ -272,7 +265,7 @@
               <p class="aura-market-perm-name">${escapeMarketHtml(perm.label)}</p>
               <p class="aura-market-perm-desc">${escapeMarketHtml(
                 perm.description || "允许插件使用该能力"
-              )}（修改后需停用并重新启用插件生效）</p>
+              )}（停用并重新启用后生效）</p>
             </div>
             <div class="form-check form-switch">
               <input

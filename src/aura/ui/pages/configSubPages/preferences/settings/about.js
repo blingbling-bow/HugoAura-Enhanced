@@ -280,8 +280,8 @@ const buildAboutHtml = () => {
           <span class="aura-about-panel-hint">用于批量部署 / 迁移到同型号设备</span>
         </div>
         <div class="aura-about-license-text">
-          导出内容: 全部 Aura 设置、插件启用状态与权限、各插件的私有设置。文件包含访问密码的
-          哈希, 请妥善保管。导出文件为明文 (加密标志强制置 false, 导入后可在目标设备重新开启加密)。
+          导出全部 Aura 设置、插件启用状态与各插件的私有设置（含访问密码哈希，请妥善保管；
+          导出为明文，导入后可重新开启加密）。
         </div>
         <div class="aura-about-config-io">
           <button id="auraConfigExportBtn" type="button" class="aura-audit-btn aura-about-btn-accent">导出配置</button>
